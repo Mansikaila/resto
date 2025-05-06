@@ -259,16 +259,77 @@ class bll_inwardmaster
         $_mdl->_transactionmode =$_REQUEST["transactionmode"];
         }
     }
+     
 }
 $_bll=new bll_inwardmaster();
-
-
     /*** FOR DETAIL ***/
     $_blldetail=new bll_inwarddetail();
     /*** /FOR DETAIL ***/
-if(isset($_REQUEST["action"]))
-{
-    $action=$_REQUEST["action"];
+if (isset($_GET["action"])) {
+    $action = $_GET["action"];
+
+if (isset($_GET["action"]) && $_GET["action"] == "fetchGstType") {
+    try {
+        $itemId = isset($_GET["item"]) ? intval($_GET["item"]) : 0;
+
+        if ($itemId <= 0) {
+            echo json_encode(["success" => false, "message" => "Invalid item ID."]);
+            exit;
+        }
+
+        global $_dbh;
+
+        $columns = "item_gst";
+        $tableName = "tbl_item_master";
+        $whereColumn = "item_id = $itemId";
+
+        // Use the correct procedure with 3 parameters
+        $stmt = $_dbh->prepare("CALL csms1_search_detail(:columns, :tableName, :whereColumn)");
+        $stmt->bindParam(":columns", $columns, PDO::PARAM_STR);
+        $stmt->bindParam(":tableName", $tableName, PDO::PARAM_STR);
+        $stmt->bindParam(":whereColumn", $whereColumn, PDO::PARAM_STR);
+        $stmt->execute();
+
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        $stmt->closeCursor();
+
+        if ($result && isset($result["item_gst"])) {
+            $gstDescriptions = [
+                1 => "GST Applicable",
+                2 => "GST Exempted",
+                3 => "GST Not Applicable"
+            ];
+
+            $itemGstId = intval($result["item_gst"]);
+            $gstType = $gstDescriptions[$itemGstId] ?? "Unknown GST Type";
+
+            echo json_encode(["success" => true, "gst_type" => $gstType]);
+        } else {
+            echo json_encode(["success" => false, "message" => "GST type not found for this item."]);
+        }
+
+    } catch (PDOException $e) {
+        echo json_encode(["success" => false, "message" => "Database error: " . $e->getMessage()]);
+    }
+    exit;
+}
+
+if (isset($_GET['unit'])) {
+    $unit = $_GET['unit'];
+
+    $stmt = $dbh->prepare("SELECT conversion_factor FROM tbl_packing_unit_master WHERE packing_unit_name = ?");
+    $stmt->execute([$unit]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($row) {
+        echo $row['conversion_factor'];
+    } else {
+        echo "";
+    }
+}
+
+ 
+    // Handle other actions (existing code)
     $_bll->$action();
 }
 if(isset($_POST["type"]) && $_POST["type"]=="ajax") {
