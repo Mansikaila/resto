@@ -32,7 +32,6 @@
         }
         $label="Add";
     }
- 
 if (isset($_POST['ajax_get_lots']) && isset($_POST['customer_id']) && isset($_POST['invoice_type'])) {
     try {
         global $_dbh;
@@ -112,7 +111,6 @@ if ($yearRow) {
     echo "Database error: " . $e->getMessage();
 }
 ?>
-
 <!-- Add this CSS for multiselect, before </body> -->
 <style>
 .multiselect {
@@ -424,15 +422,10 @@ if ($yearRow) {
                           $field_str .= addNumber($fieldname, $value, $required_str, $disabled_str, $cls, $duplicate_str, $min_str, $step_str) . $error_container;
                         } else if ($fields_types[$i] == "select") {
                           $cls = "form-select $required_str $duplicate_str";
-                       if (!empty($dropdown_table[$i]) && !empty($label_column[$i]) && !empty($value_column[$i])) {
-        // Explicitly set selected_val for customer field
-        if ($fieldname == "customer" && $transactionmode == "U") {
-            $selected_val = isset($_bll->_mdl->_customer) ? $_bll->_mdl->_customer : "";
-        } else {
-            $selected_val = isset($_bll->_mdl->$cls_field_name) ? $_bll->_mdl->$cls_field_name : "";
-        }
-        $field_str .= getDropdown($dropdown_table[$i], $value_column[$i], $label_column[$i], $where_condition_val, $fieldname, $selected_val, $cls, $required_str) . $error_container;
-    }
+                            $selected_val = ($transactionmode == "U" && $_bll->_mdl->{"_" . $fieldname}) ? $_bll->_mdl->{"_" . $fieldname} : "";
+                          if (!empty($dropdown_table[$i]) && !empty($label_column[$i]) && !empty($value_column[$i])) {
+                            $field_str .= getDropdown($dropdown_table[$i], $value_column[$i], $label_column[$i], $where_condition_val, $fieldname, $selected_val, $cls, $required_str) . $error_container;
+                          }
                         } else {
                           if ($flag == 0) {
                             $field_str .= addInput($fields_types[$i], $fieldname, $value, $required_str, $disabled_str, $cls, $duplicate_str, $chk_str) . $error_container;
@@ -813,6 +806,7 @@ if ($yearRow) {
                                          }
                                          else if($fields_types[$i]=="select") {
                                             $cls="form-select ".$required_str." ".$duplicate_str." ".$display_str;
+                                             $selected_val = ($transactionmode == "U" && isset($_bll->_mdl->{$cls_field_name})) ? $_bll->_mdl->{$cls_field_name} : "";
                                             if(!empty($dropdown_table[$i]) && !empty($label_column[$i]) && !empty($value_column[$i])) {
                                                 $field_str.=getDropdown($dropdown_table[$i],$value_column[$i],$label_column[$i],$where_condition_val,$fields_names[$i],$selected_val,$cls,$required_str);
                                                 $field_str.=$error_container;
@@ -892,1090 +886,976 @@ if ($yearRow) {
     include("include/footer_includes.php");
 ?>
     
-<script>
-$(document).ready(function () {
-    const taxInputs = ['sgst', 'cgst', 'igst'];
-    const taxContainer = $('.tax-fields-container'); 
+    <script>
+    $(document).ready(function () {
+        const taxInputs = ['sgst', 'cgst', 'igst'];
+        const taxContainer = $('.tax-fields-container'); 
 
-    function hideFields(fields) {
-        fields.forEach(function (name) {
-            $('label[for="' + name + '"]').parent().hide(); 
-            $('[name="' + name + '"]').parent().hide();
-        });
-        taxContainer.addClass('hidden-fields'); 
+        function hideFields(fields) {
+            fields.forEach(function (name) {
+                $('label[for="' + name + '"]').parent().hide(); 
+                $('[name="' + name + '"]').parent().hide();
+            });
+            taxContainer.addClass('hidden-fields'); 
+        }
+
+        function showFields(fields) {
+            fields.forEach(function (name) {
+                $('label[for="' + name + '"]').parent().show();
+                $('[name="' + name + '"]').parent().show();
+            });
+            taxContainer.removeClass('hidden-fields'); 
+        }
+
+        function disableFields(fields) {
+            fields.forEach(function (name) {
+
+                $('[name="' + name + '"]').prop('disabled', true)
+                    .closest('.tax-field').addClass('disabled-tax');
+            });
+        }
+
+        function enableFields(fields) {
+            fields.forEach(function (name) {
+                $('[name="' + name + '"]').prop('disabled', false)
+                    .closest('.tax-field').removeClass('disabled-tax');
+            });
+        }
+
+        function handleInvoiceTypeChange() {
+            const selectedType = $('input[name="invoice_type"]:checked').val();
+            if (selectedType === "1") { // Regular
+                hideFields(['tax_amount', ...taxInputs]);
+                $('input[name="tax_amount"]').prop('checked', false).prop('disabled', false);
+                enableFields(taxInputs);
+                $('select[name="hsn_code"]').prop('disabled', true);
+            } 
+            else if (selectedType === "2") { // Tax Invoice
+                showFields(['tax_amount', ...taxInputs]);
+                $('input[name="tax_amount"]').prop('disabled', false);
+                disableFields(taxInputs);
+                $('select[name="hsn_code"]').prop('disabled', false);
+            } 
+            else if (selectedType === "3") { // Bill of Supply
+                showFields(['tax_amount', ...taxInputs]);
+                $('input[name="tax_amount"]').prop('disabled', true); 
+                disableFields(taxInputs);
+                $('select[name="hsn_code"]').prop('disabled', false);
+            }
+        }
+
+        // Default to Tax Invoice and focus
+        $('input[name="invoice_type"][value="2"]').prop('checked', true).focus();
+        handleInvoiceTypeChange();
+        $('input[name="invoice_type"]').change(handleInvoiceTypeChange);
+    });
+    </script>  
+    <script>
+    document.addEventListener("DOMContentLoaded", function () {    
+        let jsonData = [];
+        let editIndex = -1;
+        let deleteData = [];
+        let detailIdLabel="";
+        const duplicateInputs = document.querySelectorAll(".duplicate");
+        const masterForm = document.getElementById("masterForm");
+        // --- Variable declarations ---
+    const invoiceDateInput = document.getElementById("invoice_date");
+    const billingTillDateInput = document.getElementById("billing_till_date");
+    const companyYearSelect = document.getElementById("company_year_id");
+    let companyYearStart, companyYearEnd;
+    const currentDate = new Date();
+
+    function formatDate(dateObj) {
+        const yyyy = dateObj.getFullYear();
+        const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const dd = String(dateObj.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
     }
 
-    function showFields(fields) {
-        fields.forEach(function (name) {
-            $('label[for="' + name + '"]').parent().show();
-            $('[name="' + name + '"]').parent().show();
-        });
-        taxContainer.removeClass('hidden-fields'); 
-    }
-
-    function disableFields(fields) {
-        fields.forEach(function (name) {
-            
-            $('[name="' + name + '"]').prop('disabled', true)
-                .closest('.tax-field').addClass('disabled-tax');
-        });
-    }
-
-    function enableFields(fields) {
-        fields.forEach(function (name) {
-            $('[name="' + name + '"]').prop('disabled', false)
-                .closest('.tax-field').removeClass('disabled-tax');
-        });
-    }
-
-    function handleInvoiceTypeChange() {
-        const selectedType = $('input[name="invoice_type"]:checked').val();
-        if (selectedType === "1") { // Regular
-            hideFields(['tax_amount', ...taxInputs]);
-            $('input[name="tax_amount"]').prop('checked', false).prop('disabled', false);
-            enableFields(taxInputs);
-            $('select[name="hsn_code"]').prop('disabled', true);
-        } 
-        else if (selectedType === "2") { // Tax Invoice
-            showFields(['tax_amount', ...taxInputs]);
-            $('input[name="tax_amount"]').prop('disabled', false);
-            disableFields(taxInputs);
-            $('select[name="hsn_code"]').prop('disabled', false);
-        } 
-        else if (selectedType === "3") { // Bill of Supply
-            showFields(['tax_amount', ...taxInputs]);
-            $('input[name="tax_amount"]').prop('disabled', true); 
-            disableFields(taxInputs);
-            $('select[name="hsn_code"]').prop('disabled', false);
+    function setDefaultInvoiceDatesForYear(fyStart, fyEnd) {
+        const today = new Date();
+        let defaultDate;
+        if (today >= fyStart && today <= fyEnd) {
+            defaultDate = today;
+        } else {
+            defaultDate = fyStart;
+        }
+        const formattedDate = formatDate(defaultDate);
+        if (invoiceDateInput) {
+            invoiceDateInput.value = formattedDate;
+            invoiceDateInput.min = formatDate(fyStart);
+            invoiceDateInput.max = formatDate(fyEnd);
+        }
+        if (billingTillDateInput) {
+            billingTillDateInput.value = formattedDate;
+            billingTillDateInput.min = formatDate(fyStart);
+            billingTillDateInput.max = formatDate(fyEnd);
         }
     }
 
-    // Default to Tax Invoice and focus
-    $('input[name="invoice_type"][value="2"]').prop('checked', true).focus();
-    handleInvoiceTypeChange();
-    $('input[name="invoice_type"]').change(handleInvoiceTypeChange);
-});
-    function setCustomerDropdown() {
-        if ($("#transactionmode").val() === "U") {
-            var customerId = "<?php echo isset($_bll->_mdl->_customer) ? $_bll->_mdl->_customer : ''; ?>";
-            console.log("Customer ID from model:", customerId);
-            
-            if (customerId) {
-                // First ensure dropdown is initialized
-                if ($("#customer").length) {
-                    // Use a small delay to ensure all options are loaded
-                    setTimeout(function() {
-                        $("#customer").val(customerId).trigger('change');
-                        console.log("Customer dropdown set to:", $("#customer").val());
-                        
-                        // Double-check if value was set properly
-                        if ($("#customer").val() != customerId) {
-                            $("#customer option").each(function() {
-                                if ($(this).val() == customerId) {
-                                    $(this).prop('selected', true);
-                                    $("#customer").trigger('change');
-                                    return false;
-                                }
-                            });
-                        }
-                    }, 300);
+    if (companyYearSelect) {
+        companyYearSelect.addEventListener("change", function () {
+            const newYearId = this.value;
+            if (!newYearId) return;
+            $.ajax({
+                url: "classes/cls_rent_invoice_master.php",
+                type: "POST",
+                data: { action: "get_company_year", company_year_id: newYearId },
+                dataType: "json",
+                success: function(response) {
+                    if (response.success) {
+                        companyYearStart = new Date(response.start_date);
+                        companyYearEnd = new Date(response.end_date);
+                        setDefaultInvoiceDatesForYear(companyYearStart, companyYearEnd);
+                    }
                 }
+            });
+        });
+    }
+
+    // On page load: set default dates based on current company year start year (from PHP)
+    (function() {
+        const companyYearStartYear = "<?php echo $companyYearStartYear; ?>";
+        if ((invoiceDateInput || billingTillDateInput) && companyYearStartYear) {
+            const today = new Date();
+            const month = (today.getMonth() + 1).toString().padStart(2, '0');
+            const day = today.getDate().toString().padStart(2, '0');
+            const formattedDate = companyYearStartYear + '-' + month + '-' + day;
+            if (invoiceDateInput) invoiceDateInput.value = formattedDate;
+            if (billingTillDateInput) billingTillDateInput.value = formattedDate;
+        }
+    })();
+
+    function validateInvoiceDate(dateString) {
+        if (!dateString) return true;
+
+        // Parse input date (YYYY-MM-DD format, ignoring time)
+        const invoiceDate = new Date(dateString);
+        invoiceDate.setHours(0, 0, 0, 0); // Normalize time to midnight
+
+        // Check if company year dates are available
+        if (companyYearStart && companyYearEnd) {
+            // Normalize company year dates (remove time part)
+            const startDate = new Date(companyYearStart);
+            startDate.setHours(0, 0, 0, 0);
+
+            const endDate = new Date(companyYearEnd);
+            endDate.setHours(0, 0, 0, 0);
+
+            if (invoiceDate < startDate) {
+                showDateError("invoice_date", "Date is below current period");
+                return false;
+            }
+            if (invoiceDate > endDate) {
+                showDateError("invoice_date", "Date is above current period");
+                return false;
+            }
+        } else {
+            // Fallback validation (if company year dates not loaded)
+            const inputYear = invoiceDate.getFullYear();
+            const inputMonth = invoiceDate.getMonth() + 1;
+            const inputDay = invoiceDate.getDate();
+
+            // Current financial year (2025-2026: 01/04/2025 to 31/03/2026)
+            const currentFYStart = new Date(2025, 3, 1); // 1st April 2025
+            const currentFYEnd = new Date(2026, 2, 31);  // 31st March 2026
+
+            if (invoiceDate < currentFYStart) {
+                showDateError("invoice_date", "Date is below current period");
+                return false;
+            }
+            if (invoiceDate > currentFYEnd) {
+                showDateError("invoice_date", "Date is above current period");
+                return false;
+            }
+        }
+
+        clearDateError("invoice_date");
+        return true;
+    }
+
+    // Billing date: No validation
+    function validateBillingTillDate() {
+        clearDateError("billing_till_date");
+        return true;
+    }
+
+    function showDateError(fieldId, message) {
+        const input = document.getElementById(fieldId);
+        if (input) {
+            input.classList.add("is-invalid");
+            const feedback = input.nextElementSibling;
+            if (feedback && feedback.classList.contains("invalid-feedback")) {
+                feedback.textContent = message;
             }
         }
     }
 
-    // Initialize customer dropdown
-    setCustomerDropdown();
-    
-    // If using AJAX to load options, also set after load
-    $(document).ajaxComplete(function() {
-        setCustomerDropdown();
-    });
-</script>  
-<script>
-document.addEventListener("DOMContentLoaded", function () {  
-    
-    let jsonData = [];
-    let editIndex = -1;
-    let deleteData = [];
-    let detailIdLabel="";
-    const duplicateInputs = document.querySelectorAll(".duplicate");
-    const masterForm = document.getElementById("masterForm");
-    // --- Variable declarations ---
-const invoiceDateInput = document.getElementById("invoice_date");
-const billingTillDateInput = document.getElementById("billing_till_date");
-const companyYearSelect = document.getElementById("company_year_id");
-let companyYearStart, companyYearEnd;
-const currentDate = new Date();
-
-function formatDate(dateObj) {
-    const yyyy = dateObj.getFullYear();
-    const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
-    const dd = String(dateObj.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
-}
-
-function setDefaultInvoiceDatesForYear(fyStart, fyEnd) {
-    const today = new Date();
-    let defaultDate;
-    if (today >= fyStart && today <= fyEnd) {
-        defaultDate = today;
-    } else {
-        defaultDate = fyStart;
+    function clearDateError(fieldId) {
+        const input = document.getElementById(fieldId);
+        if (input) {
+            input.classList.remove("is-invalid");
+            const feedback = input.nextElementSibling;
+            if (feedback && feedback.classList.contains("invalid-feedback")) {
+                feedback.textContent = "";
+            }
+        }
     }
-    const formattedDate = formatDate(defaultDate);
+
+    // Autofill billing date from invoice date when tabbing from invoice date to billing date
+    if (invoiceDateInput && billingTillDateInput) {
+        invoiceDateInput.addEventListener("keydown", function(e) {
+            // If Tab pressed and not Shift+Tab (so moving forward)
+            if (e.key === "Tab" && !e.shiftKey) {
+                // Timeout allows the focus to move to billingTillDateInput
+                setTimeout(function() {
+                    if (document.activeElement === billingTillDateInput) {
+                        billingTillDateInput.value = invoiceDateInput.value;
+                    }
+                }, 0);
+            }
+        });
+    }
+
+    // Listeners
     if (invoiceDateInput) {
-        invoiceDateInput.value = formattedDate;
-        invoiceDateInput.min = formatDate(fyStart);
-        invoiceDateInput.max = formatDate(fyEnd);
+        invoiceDateInput.addEventListener("change", function() {
+            validateInvoiceDate(this.value);
+        });
+        invoiceDateInput.addEventListener("blur", function() {
+            validateInvoiceDate(this.value);
+        });
     }
     if (billingTillDateInput) {
-        billingTillDateInput.value = formattedDate;
-        billingTillDateInput.min = formatDate(fyStart);
-        billingTillDateInput.max = formatDate(fyEnd);
-    }
-}
-
-if (companyYearSelect) {
-    companyYearSelect.addEventListener("change", function () {
-        const newYearId = this.value;
-        if (!newYearId) return;
-        $.ajax({
-            url: "classes/cls_rent_invoice_master.php",
-            type: "POST",
-            data: { action: "get_company_year", company_year_id: newYearId },
-            dataType: "json",
-            success: function(response) {
-                if (response.success) {
-                    companyYearStart = new Date(response.start_date);
-                    companyYearEnd = new Date(response.end_date);
-                    setDefaultInvoiceDatesForYear(companyYearStart, companyYearEnd);
-                }
-            }
+        billingTillDateInput.addEventListener("change", function() {
+            clearDateError("billing_till_date");
         });
-    });
-}
-
-// On page load: set default dates based on current company year start year (from PHP)
-(function() {
-    const companyYearStartYear = "<?php echo $companyYearStartYear; ?>";
-    if ((invoiceDateInput || billingTillDateInput) && companyYearStartYear) {
-        const today = new Date();
-        const month = (today.getMonth() + 1).toString().padStart(2, '0');
-        const day = today.getDate().toString().padStart(2, '0');
-        const formattedDate = companyYearStartYear + '-' + month + '-' + day;
-        if (invoiceDateInput) invoiceDateInput.value = formattedDate;
-        if (billingTillDateInput) billingTillDateInput.value = formattedDate;
-    }
-})();
-
-function validateInvoiceDate(dateString) {
-    if (!dateString) return true;
-    
-    // Parse input date (YYYY-MM-DD format, ignoring time)
-    const invoiceDate = new Date(dateString);
-    invoiceDate.setHours(0, 0, 0, 0); // Normalize time to midnight
-    
-    // Check if company year dates are available
-    if (companyYearStart && companyYearEnd) {
-        // Normalize company year dates (remove time part)
-        const startDate = new Date(companyYearStart);
-        startDate.setHours(0, 0, 0, 0);
-        
-        const endDate = new Date(companyYearEnd);
-        endDate.setHours(0, 0, 0, 0);
-        
-        if (invoiceDate < startDate) {
-            showDateError("invoice_date", "Date is below current period");
-            return false;
-        }
-        if (invoiceDate > endDate) {
-            showDateError("invoice_date", "Date is above current period");
-            return false;
-        }
-    } else {
-        // Fallback validation (if company year dates not loaded)
-        const inputYear = invoiceDate.getFullYear();
-        const inputMonth = invoiceDate.getMonth() + 1;
-        const inputDay = invoiceDate.getDate();
-        
-        // Current financial year (2025-2026: 01/04/2025 to 31/03/2026)
-        const currentFYStart = new Date(2025, 3, 1); // 1st April 2025
-        const currentFYEnd = new Date(2026, 2, 31);  // 31st March 2026
-        
-        if (invoiceDate < currentFYStart) {
-            showDateError("invoice_date", "Date is below current period");
-            return false;
-        }
-        if (invoiceDate > currentFYEnd) {
-            showDateError("invoice_date", "Date is above current period");
-            return false;
-        }
-    }
-    
-    clearDateError("invoice_date");
-    return true;
-}
-
-// Billing date: No validation
-function validateBillingTillDate() {
-    clearDateError("billing_till_date");
-    return true;
-}
-
-function showDateError(fieldId, message) {
-    const input = document.getElementById(fieldId);
-    if (input) {
-        input.classList.add("is-invalid");
-        const feedback = input.nextElementSibling;
-        if (feedback && feedback.classList.contains("invalid-feedback")) {
-            feedback.textContent = message;
-        }
-    }
-}
-
-function clearDateError(fieldId) {
-    const input = document.getElementById(fieldId);
-    if (input) {
-        input.classList.remove("is-invalid");
-        const feedback = input.nextElementSibling;
-        if (feedback && feedback.classList.contains("invalid-feedback")) {
-            feedback.textContent = "";
-        }
-    }
-}
-
-// Autofill billing date from invoice date when tabbing from invoice date to billing date
-if (invoiceDateInput && billingTillDateInput) {
-    invoiceDateInput.addEventListener("keydown", function(e) {
-        // If Tab pressed and not Shift+Tab (so moving forward)
-        if (e.key === "Tab" && !e.shiftKey) {
-            // Timeout allows the focus to move to billingTillDateInput
-            setTimeout(function() {
-                if (document.activeElement === billingTillDateInput) {
-                    billingTillDateInput.value = invoiceDateInput.value;
-                }
-            }, 0);
-        }
-    });
-}
-
-// Listeners
-if (invoiceDateInput) {
-    invoiceDateInput.addEventListener("change", function() {
-        validateInvoiceDate(this.value);
-    });
-    invoiceDateInput.addEventListener("blur", function() {
-        validateInvoiceDate(this.value);
-    });
-}
-if (billingTillDateInput) {
-    billingTillDateInput.addEventListener("change", function() {
-        clearDateError("billing_till_date");
-    });
-    billingTillDateInput.addEventListener("blur", function() {
-        clearDateError("billing_till_date");
-    });
-}
-
-// On page load, trigger year change for setup
-if (companyYearSelect && companyYearSelect.value) {
-    companyYearSelect.dispatchEvent(new Event('change'));
-}
-
-    const firstInput = masterForm.querySelector("input:not([type=hidden]), select, textarea");
-    if (firstInput) {
-        firstInput.focus();
-    }
-    function checkDuplicate(input) {
-       let column_value = input.value.trim();
-       if (column_value == "") return;
-       let id_column="<?php echo "rent_invoice_id" ?>";
-       let id_value=document.getElementById(id_column).value;
-       $.ajax({
-            url: "<?php echo "classes/cls_rent_invoice_master.php"; ?>",
-            type: "POST",
-            data: { column_name: input.name, column_value:column_value, id_name:id_column,id_value:id_value,table_name:"<?php echo "tbl_rent_invoice_master"; ?>",action:"checkDuplicate"},
-            success: function(response) {
-                //let input=document.getElementById("party_sequence");
-                if (response == 1) {
-                    input.classList.add("is-invalid");
-                    input.focus();
-                    let message="";
-                    if(input.validationMessage)
-                        message=input.validationMessage;
-                    else
-                        message="Duplicate Value";
-                    if(input.nextElementSibling) 
-                      input.nextElementSibling.textContent = message;
-                      return false;
-                } else {
-                   input.classList.remove("is-invalid");
-                    if(input.nextElementSibling) 
-                        input.nextElementSibling.textContent = "";
-                }
-            },
-            error: function() {
-                console.log("Error");
-            }
-        }); // ajax completed
-    }
-    //MANSI- INVOICE NO AUTO
-    const financialYear = "<?php echo $finYear; ?>";
-    const rentInvoiceSequenceInput = document.getElementById("rent_invoice_sequence");
-    const invoiceNoInput = document.getElementById("invoice_no");
-    if (rentInvoiceSequenceInput && invoiceNoInput) {
-        rentInvoiceSequenceInput.addEventListener("input", function () {
-            const sequence = parseInt(this.value) || 1;
-            const paddedSequence = sequence.toString().padStart(4, '0');
-            invoiceNoInput.value = `${paddedSequence}/${financialYear}`;
+        billingTillDateInput.addEventListener("blur", function() {
+            clearDateError("billing_till_date");
         });
     }
-    const invoiceNoHidden = document.getElementById("invoice_no_hidden");
-    if (invoiceNoInput && invoiceNoHidden) {
-        invoiceNoInput.addEventListener("input", function () {
-            invoiceNoHidden.value = invoiceNoInput.value;
-        });
+
+    // On page load, trigger year change for setup
+    if (companyYearSelect && companyYearSelect.value) {
+        companyYearSelect.dispatchEvent(new Event('change'));
     }
-    //DONE
-         const tableHead = document.getElementById("tableHead");
-        const tableBody = document.getElementById("tableBody");
-        const form = document.getElementById("popupForm");
-        const modalDialog = document.getElementById("modalDialog");
-        const modal = new bootstrap.Modal(modalDialog);
-    
-        document.querySelectorAll("#searchDetail tbody tr").forEach(row => {
-            let rowData = {};
-            if(!row.classList.contains("norecords")) {
-                rowData[row.dataset.label]=row.dataset.id;
-                detailIdLabel=row.dataset.label;
-                editIndex++;
-                row.querySelectorAll("td[data-label]").forEach(td => {
-                    if(!td.classList.contains("actions")){
-                        rowData[td.dataset.label] = td.innerText;
+
+        const firstInput = masterForm.querySelector("input:not([type=hidden]), select, textarea");
+        if (firstInput) {
+            firstInput.focus();
+        }
+        function checkDuplicate(input) {
+           let column_value = input.value.trim();
+           if (column_value == "") return;
+           let id_column="<?php echo "rent_invoice_id" ?>";
+           let id_value=document.getElementById(id_column).value;
+           $.ajax({
+                url: "<?php echo "classes/cls_rent_invoice_master.php"; ?>",
+                type: "POST",
+                data: { column_name: input.name, column_value:column_value, id_name:id_column,id_value:id_value,table_name:"<?php echo "tbl_rent_invoice_master"; ?>",action:"checkDuplicate"},
+                success: function(response) {
+                    //let input=document.getElementById("party_sequence");
+                    if (response == 1) {
+                        input.classList.add("is-invalid");
+                        input.focus();
+                        let message="";
+                        if(input.validationMessage)
+                            message=input.validationMessage;
+                        else
+                            message="Duplicate Value";
+                        if(input.nextElementSibling) 
+                          input.nextElementSibling.textContent = message;
+                          return false;
+                    } else {
+                       input.classList.remove("is-invalid");
+                        if(input.nextElementSibling) 
+                            input.nextElementSibling.textContent = "";
                     }
-                });
-                rowData["detailtransactionmode"]="U";
-                jsonData[editIndex]=rowData;
-            }
-        });
-    
-    modalDialog.addEventListener("hidden.bs.modal", function () {
-     clearForm(form);
-     setFocustAfterClose();
-    });
-    
-    function openModal(index = -1) {
-  
-        if (index >= 0) {
-            editIndex = index;
-            const data = jsonData[index];
+                },
+                error: function() {
+                    console.log("Error");
+                }
+            }); // ajax completed
+        }
+        //MANSI- INVOICE NO AUTO
+        const financialYear = "<?php echo $finYear; ?>";
+        const rentInvoiceSequenceInput = document.getElementById("rent_invoice_sequence");
+        const invoiceNoInput = document.getElementById("invoice_no");
+        if (rentInvoiceSequenceInput && invoiceNoInput) {
+            rentInvoiceSequenceInput.addEventListener("input", function () {
+                const sequence = parseInt(this.value) || 1;
+                const paddedSequence = sequence.toString().padStart(4, '0');
+                invoiceNoInput.value = `${paddedSequence}/${financialYear}`;
+            });
+        }
+        const invoiceNoHidden = document.getElementById("invoice_no_hidden");
+        if (invoiceNoInput && invoiceNoHidden) {
+            invoiceNoInput.addEventListener("input", function () {
+                invoiceNoHidden.value = invoiceNoInput.value;
+            });
+        }
+        //DONE
+             const tableHead = document.getElementById("tableHead");
+            const tableBody = document.getElementById("tableBody");
+            const form = document.getElementById("popupForm");
+            const modalDialog = document.getElementById("modalDialog");
+            const modal = new bootstrap.Modal(modalDialog);
 
-            for (let key in data) {
-                const inputFields = form.elements[key]; // May return NodeList if multiple inputs exist
-
-                if (!inputFields) continue; // Skip if field not found
-
-                if (inputFields.length) {
-                    // If multiple inputs exist (radio, checkbox, hidden with same name)
-                    inputFields.forEach(inputField => {
-                        if (inputField.type === "checkbox" || inputField.type === "radio") {
-                             if (inputField.value === data[key]) {
-                                 inputField.checked = true;
-                                jQuery("#"+key).attr( "checked", "checked" );
-                            } else {
-                                $("#"+key).removeAttr("checked");
-                            }
-                        }
-                        else if (inputField.type !== "hidden") {
-                            inputField.value = data[key]; // Avoid setting hidden field values
+            document.querySelectorAll("#searchDetail tbody tr").forEach(row => {
+                let rowData = {};
+                if(!row.classList.contains("norecords")) {
+                    rowData[row.dataset.label]=row.dataset.id;
+                    detailIdLabel=row.dataset.label;
+                    editIndex++;
+                    row.querySelectorAll("td[data-label]").forEach(td => {
+                        if(!td.classList.contains("actions")){
+                            rowData[td.dataset.label] = td.innerText;
                         }
                     });
-                } else {
-                        inputFields.value = data[key]; // Avoid hidden fields
+                    rowData["detailtransactionmode"]="U";
+                    jsonData[editIndex]=rowData;
                 }
+            });
+
+        modalDialog.addEventListener("hidden.bs.modal", function () {
+         clearForm(form);
+         setFocustAfterClose();
+        });
+
+        function openModal(index = -1) {
+
+            if (index >= 0) {
+                editIndex = index;
+                const data = jsonData[index];
+
+                for (let key in data) {
+                    const inputFields = form.elements[key]; // May return NodeList if multiple inputs exist
+
+                    if (!inputFields) continue; // Skip if field not found
+
+                    if (inputFields.length) {
+                        // If multiple inputs exist (radio, checkbox, hidden with same name)
+                        inputFields.forEach(inputField => {
+                            if (inputField.type === "checkbox" || inputField.type === "radio") {
+                                 if (inputField.value === data[key]) {
+                                     inputField.checked = true;
+                                    jQuery("#"+key).attr( "checked", "checked" );
+                                } else {
+                                    $("#"+key).removeAttr("checked");
+                                }
+                            }
+                            else if (inputField.type !== "hidden") {
+                                inputField.value = data[key]; // Avoid setting hidden field values
+                            }
+                        });
+                    } else {
+                            inputFields.value = data[key]; // Avoid hidden fields
+                    }
+                }
+            } else {
+                editIndex = -1;
+                clearForm(form);
             }
-        } else {
-            editIndex = -1;
+            modal.show();
+
+            // Ensure focus on the first visible field
+            setTimeout(() => {
+                const firstInput = form.querySelector("input:not([type=hidden]), input:not(.btn-close), select, textarea");
+                if (firstInput) firstInput.focus();
+            }, 10);
+        }
+
+        function saveData() {
+
+            const formData = new FormData(form);
+            const newEntry = {};
+            const allEntries= {};
+
+             // Convert form data to object (excluding hidden fields)
+              for (const [key, value] of formData.entries()) {
+                if (!getHiddenFields().includes(key) && getDisplayFields().includes(key)) {
+                    newEntry[key] = value;
+                } 
+                if (editIndex >= 0) {
+                    if(jsonData[editIndex].hasOwnProperty(key)) {
+                        jsonData[editIndex][key] = value;
+                    } 
+                }
+                allEntries[key]=value;
+              }
+
+            if($("#norecords").length>0) {
+                $("#norecords").remove();
+            }
+
+            if (editIndex >= 0) {
+                updateTableRow(editIndex, newEntry);
+                modal.hide();
+                Swal.fire({
+                    icon: "success",
+                    title: "Updated Successfully",
+                    text: "The record has been updated successfully!",
+                    showConfirmButton: true,
+                    showClass: {
+                        popup: ""
+                    },
+                    hideClass: {
+                        popup: ""
+                    }
+                }).then((result) => {
+                     setFocustAfterClose();
+                });
+            } else {
+                allEntries["detailtransactionmode"]="I";
+                jsonData.push(allEntries);
+                appendTableRow(newEntry, jsonData.length - 1);
+                modal.hide();
+                Swal.fire({
+                    icon: "success",
+                    title: "Added Successfully",
+                    text: "The record has been added successfully!",
+                    showConfirmButton: true,
+                    showClass: {
+                        popup: ""
+                    },
+                    hideClass: {
+                        popup: ""
+                    }
+                }).then((result) => {
+                      if (result.isConfirmed) {
+                        modal.show();
+                        setTimeout(() => {
+                            const firstInput = form.querySelector("input:not([type=hidden]), input:not(.btn-close)");
+                            if (firstInput) firstInput.focus();
+                        }, 100);
+                      }
+                });
+            }
             clearForm(form);
         }
-        modal.show();
+        function getHiddenFields() {
 
-        // Ensure focus on the first visible field
-        setTimeout(() => {
-            const firstInput = form.querySelector("input:not([type=hidden]), input:not(.btn-close), select, textarea");
-            if (firstInput) firstInput.focus();
-        }, 10);
-    }
+            let hiddenFields = Array.from(form.elements)
+                .filter(input => input.type === "hidden" && input.classList.contains("exclude-field"))
+                .map(input => input.name);
 
-    function saveData() {
-    
-        const formData = new FormData(form);
-        const newEntry = {};
-        const allEntries= {};
+            // Add a static entry
+            hiddenFields.push("detailtransactionmode");
 
-         // Convert form data to object (excluding hidden fields)
-          for (const [key, value] of formData.entries()) {
-            if (!getHiddenFields().includes(key) && getDisplayFields().includes(key)) {
-                newEntry[key] = value;
+            return hiddenFields;
+        }
+        function getDisplayFields() {
+            let displayFields=[];
+            let formElements = Array.from(form.elements);
+            formElements.forEach(input => {
+                if (input.length) { // Handle RadioNodeList
+                    for (let element of input) {
+                        if (element.classList && element.classList.contains("display")) {
+                            displayFields.push(input.name);
+                            break;
+                        }
+                    }
+                } else if (input.classList && input.classList.contains("display")) { 
+                    displayFields.push(input.name);
+                }
+            });
+          return displayFields;
+      }
+        function appendTableRow(rowData, index) {
+            const row = document.createElement("tr");
+            var id=0;
+            if(detailIdLabel!=""){
+                id=rowData[detailIdLabel];
             } 
-            if (editIndex >= 0) {
-                if(jsonData[editIndex].hasOwnProperty(key)) {
-                    jsonData[editIndex][key] = value;
-                } 
-            }
-            allEntries[key]=value;
-          }
-        
-        if($("#norecords").length>0) {
-            $("#norecords").remove();
-        }
-        
-        if (editIndex >= 0) {
-            updateTableRow(editIndex, newEntry);
-            modal.hide();
-            Swal.fire({
-                icon: "success",
-                title: "Updated Successfully",
-                text: "The record has been updated successfully!",
-                showConfirmButton: true,
-                showClass: {
-                    popup: ""
-                },
-                hideClass: {
-                    popup: ""
+            row.setAttribute("data-id", id);
+            addActions(row,index,id);       
+
+            Object.keys(rowData).forEach(col => {
+                if (!getHiddenFields().includes(col) && getDisplayFields().includes(col))  {
+                    const cell = document.createElement("td");
+                    cell.textContent = rowData[col] || "";
+                    cell.setAttribute("data-label", col);
+                    row.appendChild(cell);
                 }
-            }).then((result) => {
-                 setFocustAfterClose();
             });
-        } else {
-            allEntries["detailtransactionmode"]="I";
-            jsonData.push(allEntries);
-            appendTableRow(newEntry, jsonData.length - 1);
-            modal.hide();
-            Swal.fire({
-                icon: "success",
-                title: "Added Successfully",
-                text: "The record has been added successfully!",
-                showConfirmButton: true,
-                showClass: {
-                    popup: ""
-                },
-                hideClass: {
-                    popup: ""
-                }
-            }).then((result) => {
-                  if (result.isConfirmed) {
-                    modal.show();
-                    setTimeout(() => {
-                        const firstInput = form.querySelector("input:not([type=hidden]), input:not(.btn-close)");
-                        if (firstInput) firstInput.focus();
-                    }, 100);
-                  }
-            });
+
+            tableBody.appendChild(row);
         }
-        clearForm(form);
-    }
-    function getHiddenFields() {
-      
-        let hiddenFields = Array.from(form.elements)
-            .filter(input => input.type === "hidden" && input.classList.contains("exclude-field"))
-            .map(input => input.name);
 
-        // Add a static entry
-        hiddenFields.push("detailtransactionmode");
+    function updateTableRow(index, rowData) {
+            const row = tableBody.children[index];
+            var id=0;
+          if(detailIdLabel!=""){
+                id=rowData[detailIdLabel];
+            } 
+            row.innerHTML = "";
+            addActions(row,index,id);
 
-        return hiddenFields;
-    }
-    function getDisplayFields() {
-        let displayFields=[];
-        let formElements = Array.from(form.elements);
-        formElements.forEach(input => {
-            if (input.length) { // Handle RadioNodeList
-                for (let element of input) {
-                    if (element.classList && element.classList.contains("display")) {
-                        displayFields.push(input.name);
-                        break;
-                    }
-                }
-            } else if (input.classList && input.classList.contains("display")) { 
-                displayFields.push(input.name);
-            }
-        });
-      return displayFields;
-  }
-    function appendTableRow(rowData, index) {
-        const row = document.createElement("tr");
-        var id=0;
-        if(detailIdLabel!=""){
-            id=rowData[detailIdLabel];
-        } 
-        row.setAttribute("data-id", id);
-        addActions(row,index,id);       
-
-        Object.keys(rowData).forEach(col => {
-            if (!getHiddenFields().includes(col) && getDisplayFields().includes(col))  {
+            Object.keys(rowData).forEach(col => {
                 const cell = document.createElement("td");
-                cell.textContent = rowData[col] || "";
                 cell.setAttribute("data-label", col);
+                cell.textContent = rowData[col] || "";
                 row.appendChild(cell);
-            }
-        });
-
-        tableBody.appendChild(row);
-    }
-
-function updateTableRow(index, rowData) {
-        const row = tableBody.children[index];
-        var id=0;
-      if(detailIdLabel!=""){
-            id=rowData[detailIdLabel];
-        } 
-        row.innerHTML = "";
-        addActions(row,index,id);
-
-        Object.keys(rowData).forEach(col => {
-            const cell = document.createElement("td");
-            cell.setAttribute("data-label", col);
-            cell.textContent = rowData[col] || "";
-            row.appendChild(cell);
-        });
-    }
-    function addActions(row,index,id) {
-        const actionCell = document.createElement("td");
-        actionCell.classList.add("actions");
-        const editButton = document.createElement("button");
-        editButton.textContent = "Edit";
-        editButton.classList.add("btn", "btn-info", "btn-sm","me-2", "edit-btn");
-        editButton.setAttribute("data-index", index);
-        editButton.setAttribute("data-id", id);
-
-        const deleteButton = document.createElement("button");
-        deleteButton.textContent = "Delete";
-        deleteButton.classList.add("btn", "btn-danger", "btn-sm","delete-btn");
-        deleteButton.setAttribute("data-index", index);
-        deleteButton.setAttribute("data-id", id);
-        
-        actionCell.appendChild(editButton);
-        actionCell.appendChild(deleteButton);
-        row.appendChild(actionCell);
-    }
-    function setFocustAfterClose() {
-        document.getElementById("detailBtn").focus();
-    }
-    document.addEventListener("click", function (event) {
-        if (event.target.classList.contains("edit-btn")) {
-            event.preventDefault(); // Stops the required field validation trigger
-            const index = event.target.getAttribute("data-index");
-            openModal(index);
-        }
-    });
-    document.addEventListener("click", function (event) {
-        if (event.target.classList.contains("delete-btn")) {
-            event.preventDefault(); // Stops the required field validation trigger
-            const index = event.target.getAttribute("data-index");
-            const id = event.target.getAttribute("data-id");
-            deleteRow(index,id);
-        }
-    });
-    //  MANSI- invoice type auto selected HSN
-        function updateHSNCodeByInvoiceType() {
-        let selectedType = document.querySelector('input[name="invoice_type"]:checked');
-        let hsnDropdown = document.getElementById("hsn_code");
-        if (selectedType && hsnDropdown) {
-            if (selectedType.value == '2') {
-                if (hsnDropdown.options.length > 1) hsnDropdown.selectedIndex = 1;
-            } else if (selectedType.value == '3') {
-                if (hsnDropdown.options.length > 2) hsnDropdown.selectedIndex = 2;
-            } else {
-                hsnDropdown.selectedIndex = 0;
-            }
-        }
-    }
-    document.querySelectorAll('input[name="invoice_type"]').forEach(function(radio) {
-        radio.addEventListener('change', updateHSNCodeByInvoiceType);
-    });
-    setTimeout(updateHSNCodeByInvoiceType, 0);
-    //DONE
-    
-   // MANSI- On customer or invoice type change, fetch lots for that customer
-        var customerInput = document.getElementById('customer');
-        var invoiceTypeInputs = document.querySelectorAll('input[name="invoice_type"]');
-        function fetchLots() {
-            var customerId = customerInput ? customerInput.value : '';
-            var invoiceType = document.querySelector('input[name="invoice_type"]:checked') ? 
-                              document.querySelector('input[name="invoice_type"]:checked').value : '';
-            if (!customerId || !invoiceType) {
-                setLotNoOptions([]);
-                return;
-            }
-            fetch(window.location.href, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: new URLSearchParams({ 
-                    ajax_get_lots: 1, 
-                    customer_id: customerId,
-                    invoice_type: invoiceType 
-                })
-            })
-            .then(response => response.json())
-            .then(response => {
-                if (response.error) {
-                    setLotNoOptions([], true);
-                } else {
-                    setLotNoOptions(response);
-                }
-            })
-            .catch(() => setLotNoOptions([], true));
-        }
-        if (customerInput) {
-            customerInput.addEventListener('change', fetchLots);
-            // Trigger initial fetch if customer is pre-selected
-            if (customerInput.value) {
-                fetchLots();
-            } else {
-                setLotNoOptions([]);
-            }
-        }
-        if (invoiceTypeInputs) {
-            invoiceTypeInputs.forEach(input => {
-                input.addEventListener('change', fetchLots);
             });
         }
-      initLotNoMultiselect();
-      function setLotNoOptions(lots, error = false) {
-      const optionsDiv = document.getElementById('lotNoSelectOptions');
-      if (!optionsDiv) return;
-      if (error) {
-        optionsDiv.innerHTML = '<div class="p-2 text-danger">Error loading lots</div>';
-        return;
-      }
-      if (!lots || lots.length === 0) {
-        optionsDiv.innerHTML = '<div class="p-2 text-muted">No lots found</div>';
-        return;
-      }
-      let allCheckbox = `
-        <label for="lot_no_all">
-          <input type="checkbox" id="lot_no_all" onchange="toggleAllLotNoCheckboxes(this)" checked />
-          All
-        </label>
-      `;
-      let lotsCheckboxes = lots.map((lot, idx) =>
-        `<label for="lot_no_${idx}">
-          <input type="checkbox" id="lot_no_${idx}" value="${lot.lot_no}" onchange="lotNoCheckboxStatusChange()" name="lot_no[]" checked/>
-          ${lot.lot_no}
-        </label>`
-      ).join('');
-      optionsDiv.innerHTML = allCheckbox + lotsCheckboxes;
-      lotNoCheckboxStatusChange();
-    }
-    function toggleAllLotNoCheckboxes(allCheckbox) {
-      const optionsDiv = document.getElementById('lotNoSelectOptions');
-      if (!optionsDiv) return;
-      const checkboxes = optionsDiv.querySelectorAll('input[type="checkbox"][name="lot_no[]"]');
-      checkboxes.forEach(cb => {
-        cb.checked = allCheckbox.checked;
-      });
-      lotNoCheckboxStatusChange();
-    }
-    function initLotNoMultiselect() {
-      lotNoCheckboxStatusChange();
-      const labelDiv = document.getElementById('lotNoSelectLabel');
-      if (labelDiv) {
-        labelDiv.addEventListener('click', function(e) {
-          e.stopPropagation();
-          toggleLotNoCheckboxArea();
-        });
-        labelDiv.addEventListener('keydown', function(e) {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            toggleLotNoCheckboxArea();
-          }
-        });
-      }
-      document.addEventListener("click", function(evt) {
-        var flyout = document.getElementById('lotNoMultiselect');
-        var target = evt.target;
-        do {
-          if (target == flyout) return;
-          target = target.parentNode;
-        } while (target);
-        toggleLotNoCheckboxArea(true);
-      });
-    }
+        function addActions(row,index,id) {
+            const actionCell = document.createElement("td");
+            actionCell.classList.add("actions");
+            const editButton = document.createElement("button");
+            editButton.textContent = "Edit";
+            editButton.classList.add("btn", "btn-info", "btn-sm","me-2", "edit-btn");
+            editButton.setAttribute("data-index", index);
+            editButton.setAttribute("data-id", id);
 
-    function lotNoCheckboxStatusChange() {
-      var multiselect = document.getElementById("lotNoSelectLabel");
-      if (!multiselect) return;
-      var option = multiselect.getElementsByTagName('option')[0];
-      var optionsDiv = document.getElementById("lotNoSelectOptions");
-      if (!optionsDiv) return;
-      var allCheckbox = document.getElementById("lot_no_all");
-      var checkboxes = optionsDiv.querySelectorAll('input[type=checkbox][name="lot_no[]"]');
-      var checked = Array.from(checkboxes).filter(cb => cb.checked);
-      var values = checked.map(cb => cb.value);
-      if (allCheckbox) {
-        allCheckbox.checked = (checked.length === checkboxes.length);
-      }
-      if (checked.length === checkboxes.length && checkboxes.length > 0) {
-        option.innerText = "All";
-      } else if (values.length > 0) {
-        option.innerText = values.join(', ');
-      } else {
-        option.innerText = "Select Lot No";
-      }
-    }
-    function toggleLotNoCheckboxArea(onlyHide = false) {
-      var checkboxes = document.getElementById("lotNoSelectOptions");
-      if (!checkboxes) return;
-      if (onlyHide) {
-        checkboxes.style.display = "none";
-        return;
-      }
-      checkboxes.style.display = (checkboxes.style.display !== "block") ? "block" : "none";
-    }
-    //DONE
-    //MANUAL MODEL
-    function toggleManualInvoiceDetails() {
-    var selected = $('#invoice_for').val();
-    if (selected === '5') { 
-      $('#manual-invoice-details').show();
-      $('#generate-btn-wrap').show(); 
-      $('#generate').prop('disabled', true);
-    } else {
-      $('#manual-invoice-details').hide();
-      $('#generate-btn-wrap').show();
-      $('#generate').prop('disabled', false); 
-    }
-  }
-      $('#invoice_for').val('1'); 
-      toggleManualInvoiceDetails();
-      $('#invoice_for').on('change', toggleManualInvoiceDetails);
-    //DONE
-    
-    function deleteRow(index,id) {
-        Swal.fire({
-          title: "Are you sure you want to delete this record?",
-          text: "You won't be able to revert it!",
-          icon: "warning",
-          showCancelButton: true,
-          confirmButtonColor: "#3085d6",
-          cancelButtonColor: "#d33",
-          confirmButtonText: "Yes, delete it!"
-        }).then((result) => {
-          if (result.isConfirmed) {
-            if(id>0) {
-                jsonData[index]["detailtransactionmode"]="D";
-                deleteData.push(jsonData[index]);
+            const deleteButton = document.createElement("button");
+            deleteButton.textContent = "Delete";
+            deleteButton.classList.add("btn", "btn-danger", "btn-sm","delete-btn");
+            deleteButton.setAttribute("data-index", index);
+            deleteButton.setAttribute("data-id", id);
+
+            actionCell.appendChild(editButton);
+            actionCell.appendChild(deleteButton);
+            row.appendChild(actionCell);
+        }
+        function setFocustAfterClose() {
+            document.getElementById("detailBtn").focus();
+        }
+        document.addEventListener("click", function (event) {
+            if (event.target.classList.contains("edit-btn")) {
+                event.preventDefault(); // Stops the required field validation trigger
+                const index = event.target.getAttribute("data-index");
+                openModal(index);
             }
-            // Remove the item from the jsonData array
-            jsonData.splice(index, 1);
-            tableBody.innerHTML = "";
-            const numberOfColumns = document.querySelector("table th") ? document.querySelector("table th").parentElement.children.length : 0;
-            // Check if there are any rows left
-            if (jsonData.length === 0) {
-                // If no rows, add a row saying "No records"
-                const noRecordsRow = document.createElement("tr");
-                for(var i=1; i< numberOfColumns; i++) {
-                    const noRecordsCell = document.createElement("td");
-                    if(i==1) {
-                        noRecordsCell.colSpan = numberOfColumns;
-                        noRecordsCell.textContent = "No records available";
-                    }
-                    noRecordsRow.appendChild(noRecordsCell);
-                }
-                noRecordsRow.setAttribute("id","norecords");
-                noRecordsRow.classList.add("norecords"); 
-                tableBody.appendChild(noRecordsRow);
-            } else {
-                // If there are rows left, re-populate the table
-                jsonData.forEach((data, idx) => appendTableRow(data, idx));
-            }
-          }
         });
-    }
-    $("#popupForm" ).on( "submit", function( event ) {
-        event.preventDefault();
-        if (!this.checkValidity()) {
-            event.stopPropagation();
-            let i=0;
-            let firstelement;
-            this.querySelectorAll(":invalid").forEach(function (input) {
-              if(i==0) {
-                firstelement=input;
+        document.addEventListener("click", function (event) {
+            if (event.target.classList.contains("delete-btn")) {
+                event.preventDefault(); // Stops the required field validation trigger
+                const index = event.target.getAttribute("data-index");
+                const id = event.target.getAttribute("data-id");
+                deleteRow(index,id);
+            }
+        });
+        //  MANSI- invoice type auto selected HSN
+            function updateHSNCodeByInvoiceType() {
+            let selectedType = document.querySelector('input[name="invoice_type"]:checked');
+            let hsnDropdown = document.getElementById("hsn_code");
+            if (selectedType && hsnDropdown) {
+                if (selectedType.value == '2') {
+                    if (hsnDropdown.options.length > 1) hsnDropdown.selectedIndex = 1;
+                } else if (selectedType.value == '3') {
+                    if (hsnDropdown.options.length > 2) hsnDropdown.selectedIndex = 2;
+                } else {
+                    hsnDropdown.selectedIndex = 0;
+                }
+            }
+        }
+        document.querySelectorAll('input[name="invoice_type"]').forEach(function(radio) {
+            radio.addEventListener('change', updateHSNCodeByInvoiceType);
+        });
+        setTimeout(updateHSNCodeByInvoiceType, 0);
+        //DONE
+
+       // MANSI- On customer or invoice type change, fetch lots for that customer
+            var customerInput = document.getElementById('customer');
+            var invoiceTypeInputs = document.querySelectorAll('input[name="invoice_type"]');
+            function fetchLots() {
+                var customerId = customerInput ? customerInput.value : '';
+                var invoiceType = document.querySelector('input[name="invoice_type"]:checked') ? 
+                                  document.querySelector('input[name="invoice_type"]:checked').value : '';
+                if (!customerId || !invoiceType) {
+                    setLotNoOptions([]);
+                    return;
+                }
+                fetch(window.location.href, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ 
+                        ajax_get_lots: 1, 
+                        customer_id: customerId,
+                        invoice_type: invoiceType 
+                    })
+                })
+                .then(response => response.json())
+                .then(response => {
+                    if (response.error) {
+                        setLotNoOptions([], true);
+                    } else {
+                        setLotNoOptions(response);
+                    }
+                })
+                .catch(() => setLotNoOptions([], true));
+            }
+            if (customerInput) {
+                customerInput.addEventListener('change', fetchLots);
+                // Trigger initial fetch if customer is pre-selected
+                if (customerInput.value) {
+                    fetchLots();
+                } else {
+                    setLotNoOptions([]);
+                }
+            }
+            if (invoiceTypeInputs) {
+                invoiceTypeInputs.forEach(input => {
+                    input.addEventListener('change', fetchLots);
+                });
+            }
+          initLotNoMultiselect();
+          function setLotNoOptions(lots, error = false) {
+          const optionsDiv = document.getElementById('lotNoSelectOptions');
+          if (!optionsDiv) return;
+          if (error) {
+            optionsDiv.innerHTML = '<div class="p-2 text-danger">Error loading lots</div>';
+            return;
+          }
+          if (!lots || lots.length === 0) {
+            optionsDiv.innerHTML = '<div class="p-2 text-muted">No lots found</div>';
+            return;
+          }
+          let allCheckbox = `
+            <label for="lot_no_all">
+              <input type="checkbox" id="lot_no_all" onchange="toggleAllLotNoCheckboxes(this)" checked />
+              All
+            </label>
+          `;
+          let lotsCheckboxes = lots.map((lot, idx) =>
+            `<label for="lot_no_${idx}">
+              <input type="checkbox" id="lot_no_${idx}" value="${lot.lot_no}" onchange="lotNoCheckboxStatusChange()" name="lot_no[]" checked/>
+              ${lot.lot_no}
+            </label>`
+          ).join('');
+          optionsDiv.innerHTML = allCheckbox + lotsCheckboxes;
+          lotNoCheckboxStatusChange();
+        }
+        function toggleAllLotNoCheckboxes(allCheckbox) {
+          const optionsDiv = document.getElementById('lotNoSelectOptions');
+          if (!optionsDiv) return;
+          const checkboxes = optionsDiv.querySelectorAll('input[type="checkbox"][name="lot_no[]"]');
+          checkboxes.forEach(cb => {
+            cb.checked = allCheckbox.checked;
+          });
+          lotNoCheckboxStatusChange();
+        }
+        function initLotNoMultiselect() {
+          lotNoCheckboxStatusChange();
+          const labelDiv = document.getElementById('lotNoSelectLabel');
+          if (labelDiv) {
+            labelDiv.addEventListener('click', function(e) {
+              e.stopPropagation();
+              toggleLotNoCheckboxArea();
+            });
+            labelDiv.addEventListener('keydown', function(e) {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                toggleLotNoCheckboxArea();
               }
+            });
+          }
+          document.addEventListener("click", function(evt) {
+            var flyout = document.getElementById('lotNoMultiselect');
+            var target = evt.target;
+            do {
+              if (target == flyout) return;
+              target = target.parentNode;
+            } while (target);
+            toggleLotNoCheckboxArea(true);
+          });
+        }
+
+        function lotNoCheckboxStatusChange() {
+          var multiselect = document.getElementById("lotNoSelectLabel");
+          if (!multiselect) return;
+          var option = multiselect.getElementsByTagName('option')[0];
+          var optionsDiv = document.getElementById("lotNoSelectOptions");
+          if (!optionsDiv) return;
+          var allCheckbox = document.getElementById("lot_no_all");
+          var checkboxes = optionsDiv.querySelectorAll('input[type=checkbox][name="lot_no[]"]');
+          var checked = Array.from(checkboxes).filter(cb => cb.checked);
+          var values = checked.map(cb => cb.value);
+          if (allCheckbox) {
+            allCheckbox.checked = (checked.length === checkboxes.length);
+          }
+          if (checked.length === checkboxes.length && checkboxes.length > 0) {
+            option.innerText = "All";
+          } else if (values.length > 0) {
+            option.innerText = values.join(', ');
+          } else {
+            option.innerText = "Select Lot No";
+          }
+        }
+        function toggleLotNoCheckboxArea(onlyHide = false) {
+          var checkboxes = document.getElementById("lotNoSelectOptions");
+          if (!checkboxes) return;
+          if (onlyHide) {
+            checkboxes.style.display = "none";
+            return;
+          }
+          checkboxes.style.display = (checkboxes.style.display !== "block") ? "block" : "none";
+        }
+        //DONE
+        //MANUAL MODEL
+        function toggleManualInvoiceDetails() {
+        var selected = $('#invoice_for').val();
+        if (selected === '5') { 
+          $('#manual-invoice-details').show();
+          $('#generate-btn-wrap').show(); 
+          $('#generate').prop('disabled', true);
+        } else {
+          $('#manual-invoice-details').hide();
+          $('#generate-btn-wrap').show();
+          $('#generate').prop('disabled', false); 
+        }
+      }
+          $('#invoice_for').val('1'); 
+          toggleManualInvoiceDetails();
+          $('#invoice_for').on('change', toggleManualInvoiceDetails);
+        //DONE
+
+        function deleteRow(index,id) {
+            Swal.fire({
+              title: "Are you sure you want to delete this record?",
+              text: "You won't be able to revert it!",
+              icon: "warning",
+              showCancelButton: true,
+              confirmButtonColor: "#3085d6",
+              cancelButtonColor: "#d33",
+              confirmButtonText: "Yes, delete it!"
+            }).then((result) => {
+              if (result.isConfirmed) {
+                if(id>0) {
+                    jsonData[index]["detailtransactionmode"]="D";
+                    deleteData.push(jsonData[index]);
+                }
+                // Remove the item from the jsonData array
+                jsonData.splice(index, 1);
+                tableBody.innerHTML = "";
+                const numberOfColumns = document.querySelector("table th") ? document.querySelector("table th").parentElement.children.length : 0;
+                // Check if there are any rows left
+                if (jsonData.length === 0) {
+                    // If no rows, add a row saying "No records"
+                    const noRecordsRow = document.createElement("tr");
+                    for(var i=1; i< numberOfColumns; i++) {
+                        const noRecordsCell = document.createElement("td");
+                        if(i==1) {
+                            noRecordsCell.colSpan = numberOfColumns;
+                            noRecordsCell.textContent = "No records available";
+                        }
+                        noRecordsRow.appendChild(noRecordsCell);
+                    }
+                    noRecordsRow.setAttribute("id","norecords");
+                    noRecordsRow.classList.add("norecords"); 
+                    tableBody.appendChild(noRecordsRow);
+                } else {
+                    // If there are rows left, re-populate the table
+                    jsonData.forEach((data, idx) => appendTableRow(data, idx));
+                }
+              }
+            });
+        }
+        $("#popupForm" ).on( "submit", function( event ) {
+            event.preventDefault();
+            if (!this.checkValidity()) {
+                event.stopPropagation();
+                let i=0;
+                let firstelement;
+                this.querySelectorAll(":invalid").forEach(function (input) {
+                  if(i==0) {
+                    firstelement=input;
+                  }
+                  input.classList.add("is-invalid");
+                  input.nextElementSibling.textContent = input.validationMessage; 
+                  i++;
+                });
+                if(firstelement) firstelement.focus(); 
+                return false;
+              } 
+            saveData();
+        } );
+        window.openModal = openModal;
+        window.saveData = saveData;
+
+     document.getElementById("btn_add").addEventListener("click", function (event) {
+        //event.preventDefault();
+        const form = document.getElementById("masterForm"); // Store form reference
+        let i=0;
+        let firstelement;
+         duplicateInputs.forEach((input) => {
+              checkDuplicate(input);
+          });
+        if (!form.checkValidity()) {
+            //event.stopPropagation();
+            form.querySelectorAll(":invalid").forEach(function (input) {
+                if(i==0) {
+                    firstelement=input;
+                }
               input.classList.add("is-invalid");
               input.nextElementSibling.textContent = input.validationMessage; 
               i++;
             });
-            if(firstelement) firstelement.focus(); 
-            return false;
-          } 
-        saveData();
-    } );
-    window.openModal = openModal;
-    window.saveData = saveData;
-   
- document.getElementById("btn_add").addEventListener("click", function (event) {
-    //event.preventDefault();
-    const form = document.getElementById("masterForm"); // Store form reference
-    let i=0;
-    let firstelement;
-     duplicateInputs.forEach((input) => {
-          checkDuplicate(input);
-      });
-    if (!form.checkValidity()) {
-        //event.stopPropagation();
-        form.querySelectorAll(":invalid").forEach(function (input) {
-            if(i==0) {
-                firstelement=input;
-            }
-          input.classList.add("is-invalid");
-          input.nextElementSibling.textContent = input.validationMessage; 
-          i++;
-        });
-         if(firstelement) firstelement.focus(); 
-         return false;
-    } else {
-        form.querySelectorAll(".is-invalid").forEach(function (input) {
-          input.classList.remove("is-invalid");
-          input.nextElementSibling.textContent = "";
-        });
-    }
-    setTimeout(function(){
-        const invalidInputs = document.querySelectorAll(".is-invalid");
-        if(invalidInputs.length>0)
-        {} else{
-            // ---- MERGE MANUAL AND GENERATED DETAILS FOR SUBMISSION ----
-            let allDetailRecords = [];
-            // Manual
-            if(Array.isArray(jsonData)) {
-                allDetailRecords = allDetailRecords.concat(jsonData);
-            }
-            // Generated (avoid duplicates on lot_no/item)
-            if(Array.isArray(generatedDetailsData) && generatedDetailsData.length>0) {
-                generatedDetailsData.forEach(function(genRec) {
-                    let exists = allDetailRecords.some(function(manRec){
-                        return genRec.lot_no == manRec.lot_no && genRec.item == manRec.item;
-                    });
-                    if(!exists) allDetailRecords.push(genRec);
-                });
-            }
-
-            const jsonDataString = JSON.stringify(allDetailRecords);
-            document.getElementById("detail_records").value = jsonDataString;
-            const deletedDataString = JSON.stringify(deleteData);
-            document.getElementById("deleted_records").value = deletedDataString;
-            let transactionMode = document.getElementById("transactionmode").value;
-            let message = "";
-            let title = "";
-            let icon = "success";
-            if (transactionMode === "U") {
-                message = "Record updated successfully!";
-                title = "Update Successful!";
-            } else {
-                message = "Record added successfully!";
-                title = "Save Successful!";
-            }
-            (async function() {
-              result=await Swal.fire(title, message, icon);
-                if (result.isConfirmed) {
-                $("#masterForm").submit();
+             if(firstelement) firstelement.focus(); 
+             return false;
+        } else {
+            form.querySelectorAll(".is-invalid").forEach(function (input) {
+              input.classList.remove("is-invalid");
+              input.nextElementSibling.textContent = "";
+            });
+        }
+        setTimeout(function(){
+            const invalidInputs = document.querySelectorAll(".is-invalid");
+            if(invalidInputs.length>0)
+            {} else{
+                // ---- MERGE MANUAL AND GENERATED DETAILS FOR SUBMISSION ----
+                let allDetailRecords = [];
+                // Manual
+                if(Array.isArray(jsonData)) {
+                    allDetailRecords = allDetailRecords.concat(jsonData);
                 }
-            })();
+                // Generated (avoid duplicates on lot_no/item)
+                if(Array.isArray(generatedDetailsData) && generatedDetailsData.length>0) {
+                    generatedDetailsData.forEach(function(genRec) {
+                        let exists = allDetailRecords.some(function(manRec){
+                            return genRec.lot_no == manRec.lot_no && genRec.item == manRec.item;
+                        });
+                        if(!exists) allDetailRecords.push(genRec);
+                    });
+                }
+
+                const jsonDataString = JSON.stringify(allDetailRecords);
+                document.getElementById("detail_records").value = jsonDataString;
+                const deletedDataString = JSON.stringify(deleteData);
+                document.getElementById("deleted_records").value = deletedDataString;
+                let transactionMode = document.getElementById("transactionmode").value;
+                let message = "";
+                let title = "";
+                let icon = "success";
+                if (transactionMode === "U") {
+                    message = "Record updated successfully!";
+                    title = "Update Successful!";
+                } else {
+                    message = "Record added successfully!";
+                    title = "Save Successful!";
+                }
+                (async function() {
+                  result=await Swal.fire(title, message, icon);
+                    if (result.isConfirmed) {
+                    $("#masterForm").submit();
+                    }
+                })();
+            }
+        },200);
+    });
+    });
+    </script>
+    <script>
+
+    // ---------- ADD THIS VARIABLE AT THE TOP (in the main DOMContentLoaded callback or globally) ----------
+    let generatedDetailsData = [];
+
+    // ---------- MODIFY YOUR "Generate Invoice" AJAX SUCCESS HANDLER ----------
+    document.getElementById("generate").addEventListener("click", function () {
+        const gridContainer = document.getElementById("generatedInvoiceGrid");
+        const tableBody = document.getElementById("generatedInvoiceTableBody");
+        const customer = document.getElementById('customer') ? document.getElementById('customer').value : '';
+        const invoiceFor = document.getElementById("invoice_for").value;
+        const invoiceType = document.querySelector('input[name="invoice_type"]:checked') ? document.querySelector('input[name="invoice_type"]:checked').value : '';
+
+        // Collect all selected lot_no values
+        const lotNoCheckboxes = document.querySelectorAll('input[name="lot_no[]"]:checked');
+        const lotNos = Array.from(lotNoCheckboxes).map(cb => cb.value);
+
+        if (!customer) {
+            Swal.fire({
+                icon: "warning",
+                title: "Missing Input",
+                text: "Please provide at least a Customer to generate the invoice.",
+            });
+            return;
         }
-    },200);
-});
-});
-    $(document).ready(function () {
-    if ($("#transactionmode").val() === "U") {
-        console.log("Customer dropdown value on load: ", $("#customer").val());
-        var customerId = "<?php echo isset($_bll->_mdl->_customer) ? $_bll->_mdl->_customer : ''; ?>";
-        console.log("Customer ID from model: ", customerId);
-        if (customerId) {
-            $("#customer").val(customerId);
-            console.log("Set customer dropdown to: ", $("#customer").val());
-        }
-    }
-});
-</script>
-<script>
-
-// ---------- ADD THIS VARIABLE AT THE TOP (in the main DOMContentLoaded callback or globally) ----------
-let generatedDetailsData = [];
-
-// ---------- MODIFY YOUR "Generate Invoice" AJAX SUCCESS HANDLER ----------
-document.getElementById("generate").addEventListener("click", function () {
-    const gridContainer = document.getElementById("generatedInvoiceGrid");
-    const tableBody = document.getElementById("generatedInvoiceTableBody");
-    const customer = document.getElementById('customer') ? document.getElementById('customer').value : '';
-    const invoiceFor = document.getElementById("invoice_for").value;
-    const invoiceType = document.querySelector('input[name="invoice_type"]:checked') ? document.querySelector('input[name="invoice_type"]:checked').value : '';
-
-    // Collect all selected lot_no values
-    const lotNoCheckboxes = document.querySelectorAll('input[name="lot_no[]"]:checked');
-    const lotNos = Array.from(lotNoCheckboxes).map(cb => cb.value);
-
-    if (!customer) {
-        Swal.fire({
-            icon: "warning",
-            title: "Missing Input",
-            text: "Please provide at least a Customer to generate the invoice.",
-        });
-        return;
-    }
-    $.ajax({
-        url: "classes/cls_rent_invoice_detail.php",
-        type: "POST",
-        data: {
-            action: "generate_details",
-            lot_no: lotNos,
-            customer: customer,
-            invoice_for: invoiceFor,
-            invoice_type: invoiceType // Add invoice_type
-        },
-        dataType: "json",
-        success: function (invoiceData) {
-            tableBody.innerHTML = "";
-            // ---------- CAPTURE THE GENERATED DETAILS FOR LATER SAVE ----------
-            generatedDetailsData = [];
-            if (!invoiceData || invoiceData.length === 0) {
-                const row = document.createElement("tr");
-                row.innerHTML = '<td colspan="21" style="text-align:center;">No records available.</td>';
-                tableBody.appendChild(row);
-            } else {
-                invoiceData.forEach((data) => {
+        $.ajax({
+            url: "classes/cls_rent_invoice_detail.php",
+            type: "POST",
+            data: {
+                action: "generate_details",
+                lot_no: lotNos,
+                customer: customer,
+                invoice_for: invoiceFor,
+                invoice_type: invoiceType // Add invoice_type
+            },
+            dataType: "json",
+            success: function (invoiceData) {
+                tableBody.innerHTML = "";
+                // ---------- CAPTURE THE GENERATED DETAILS FOR LATER SAVE ----------
+                generatedDetailsData = [];
+                if (!invoiceData || invoiceData.length === 0) {
                     const row = document.createElement("tr");
-                    row.innerHTML = `
-                        <td>${data.in_no ?? ''}</td>
-                        <td>${data.in_date ?? ''}</td>
-                        <td>${data.lot_no ?? ''}</td>
-                        <td>${data.item ?? ''}</td>
-                        <td>${data.marko ?? ''}</td>
-                        <td>${data.qty ?? ''}</td>
-                        <td>${data.unit ?? ''}</td>
-                        <td>${data.weight ?? ''}</td>
-                        <td>${data.storage_duration ?? ''}</td>
-                        <td>${data.rent_per_storage_duration ?? ''}</td>
-                        <td>${data.rent_per ?? ''}</td>
-                        <td>${data.out_date_display ?? ''}</td>
+                    row.innerHTML = '<td colspan="21" style="text-align:center;">No records available.</td>';
+                    tableBody.appendChild(row);
+                } else {
+                    invoiceData.forEach((data) => {
+                        const row = document.createElement("tr");
+                        row.innerHTML = `
+                            <td>${data.in_no ?? ''}</td>
+                            <td>${data.in_date ?? ''}</td>
+                            <td>${data.lot_no ?? ''}</td>
+                            <td>${data.item ?? ''}</td>
+                            <td>${data.marko ?? ''}</td>
+                            <td>${data.qty ?? ''}</td>
+                            <td>${data.unit ?? ''}</td>
+                            <td>${data.weight ?? ''}</td>
+                            <td>${data.storage_duration ?? ''}</td>
+                            <td>${data.rent_per_storage_duration ?? ''}</td>
+                            <td>${data.rent_per ?? ''}</td>
+                            <td>${data.out_date_display ?? ''}</td>
                          <td>${data.charges_from_display ?? ''}</td>
                         <td>${data.charges_to_display ?? ''}</td>
-                        <td>${data.act_month ?? ''}</td>
-                        <td>${data.act_day ?? ''}</td>
-                        <td>${data.invoice_month ?? ''}</td>
-                        <td>${data.invoice_day ?? ''}</td>
-                        <td>${data.amount ?? ''}</td>
-                        <td>${data.invoice_for ?? ''}</td>
-                    `;
-                    tableBody.appendChild(row);
+                            <td>${data.act_month ?? ''}</td>
+                            <td>${data.act_day ?? ''}</td>
+                            <td>${data.invoice_month ?? ''}</td>
+                            <td>${data.invoice_day ?? ''}</td>
+                            <td>${data.amount ?? ''}</td>
+                            <td>${data.invoice_for ?? ''}</td>
+                        `;
+                        tableBody.appendChild(row);
 
-                    // ---------- PUSH THE DATA IN THE FORMAT EXPECTED BY BACKEND ----------
-                    generatedDetailsData.push({
-                        inward_no: data.in_no ?? '',
-                        inward_date: data.in_date ?? '',
-                        lot_no: data.lot_no ?? '',
-                        item: data.item ?? '',
-                        marko: data.marko ?? '',
-                        invoice_qty: data.qty ?? '',
-                        unit_name: data.unit ?? '',
-                        wt_per_kg: data.weight ?? '',
-                        storage_duration: data.storage_duration ?? '',
-                        rent_per_storage_duration: data.rent_per_storage_duration ?? '',
-                        rent_per: data.rent_per ?? '',
-                        outward_date: data.out_date ?? null, // Use the Y-m-d formatted date
+                        // ---------- PUSH THE DATA IN THE FORMAT EXPECTED BY BACKEND ----------
+                        generatedDetailsData.push({
+                            inward_no: data.in_no ?? '',
+                            inward_date: data.inward_date_db  ?? '',
+                            lot_no: data.lot_no ?? '',
+                             item: data.item_id ?? '', 
+                            marko: data.marko ?? '',
+                            invoice_qty: data.qty ?? '',
+                            unit_name: data.unit_id ?? '', 
+                            wt_per_kg: data.weight ?? '',
+                            storage_duration: data.storage_duration_id  ?? '',
+                            rent_per_storage_duration: data.rent_per_storage_duration ?? '',
+                            rent_per: data.rent_per_id  ?? '',
+                            outward_date: data.out_date ?? null, // Use the Y-m-d formatted date
     charges_from: data.charges_from ?? null,
     charges_to: data.charges_to ?? null,
-                        actual_month: data.act_month ?? '',
-                        actual_day: data.act_day ?? '',
-                        invoice_month: data.invoice_month ?? '',
-                        invoice_day: data.invoice_day ?? '',
-                        invoice_amount: data.amount ?? '',
-                        invoice_for: data.invoice_for ?? '',
-                        gst_status: data.gst_status ?? '',
-                        detailtransactionmode: 'I'
+                            actual_month: data.act_month ?? '',
+                            actual_day: data.act_day ?? '',
+                            invoice_month: data.invoice_month ?? '',
+                            invoice_day: data.invoice_day ?? '',
+                            invoice_amount: data.amount ?? '',
+                            invoice_for: data.invoice_for ?? '',
+                            gst_status: data.gst_status ?? '',
+                            detailtransactionmode: 'I'
+                        });
                     });
+                }
+                gridContainer.style.display = "block";
+            },
+            error: function (xhr, status, error) {
+                console.error("AJAX Error:", {
+                    status: status,
+                    error: error,
+                    responseText: xhr.responseText,
+                    statusCode: xhr.status
                 });
+                tableBody.innerHTML = '<tr><td colspan="21" style="text-align:center;">Error loading data: ' + (xhr.responseText || error) + '</td></tr>';
+                gridContainer.style.display = "block";
             }
-            gridContainer.style.display = "block";
-        },
-        error: function (xhr, status, error) {
-            console.error("AJAX Error:", {
-                status: status,
-                error: error,
-                responseText: xhr.responseText,
-                statusCode: xhr.status
-            });
-            tableBody.innerHTML = '<tr><td colspan="21" style="text-align:center;">Error loading data: ' + (xhr.responseText || error) + '</td></tr>';
-            gridContainer.style.display = "block";
-        }
+        });
     });
-});
-// Attach this handler after your table is loaded (or delegate)
-$(document).on('click', '.edit-btn', function () {
-    var detailId = $(this).data('id');
-    $.ajax({
-        url: "classes/cls_rent_invoice_detail.php",
-        type: "POST",
-        data: {
-            action: "fetch_detail",
-            rent_invoice_detail_id: detailId
-        },
-        dataType: "json",
-        success: function (data) {
-            // Fill form fields (adjust IDs as per your form)
-            $('#rent_invoice_detail_id').val(data.rent_invoice_detail_id);
-            $('#rent_invoice_id').val(data.rent_invoice_id);
-            $('#description').val(data.description);
-            $('#qty').val(data.qty);
-            $('#unit').val(data.unit);
-            $('#weight').val(data.weight);
-            $('#rate_per_unit').val(data.rate_per_unit);
-            $('#amount').val(data.amount);
-            $('#remark').val(data.remark);
-            $('#inward_no').val(data.inward_no);
-            $('#inward_date').val(data.inward_date);
-            $('#lot_no').val(data.lot_no);
-            $('#item').val(data.item);
-            $('#marko').val(data.marko);
-            $('#invoice_qty').val(data.invoice_qty);
-            $('#unit_name').val(data.unit_name);
-            $('#wt_per_kg').val(data.wt_per_kg);
-            $('#storage_duration').val(data.storage_duration);
-            $('#rent_per_storage_duration').val(data.rent_per_storage_duration);
-            $('#rent_per').val(data.rent_per);
-            $('#outward_date').val(data.outward_date);
-            $('#charges_from').val(data.charges_from);
-            $('#charges_to').val(data.charges_to);
-            $('#actual_month').val(data.actual_month);
-            $('#actual_day').val(data.actual_day);
-            $('#invoice_month').val(data.invoice_month);
-            $('#invoice_day').val(data.invoice_day);
-            $('#invoice_amount').val(data.invoice_amount);
-            $('#invoice_for').val(data.invoice_for);
-            $('#gst_status').val(data.gst_status);
-            // Open edit modal (adjust ID as per your modal)
-            $('#editModal').modal('show');
-        },
-        error: function () {
-            Swal.fire("Error", "Could not fetch detail record for editing.", "error");
-        }
-    });
-});
 
-// After save/update, reload the grid
-function reloadDetailGrid() {
-    var rent_invoice_id = $('#rent_invoice_id').val();
-    $.ajax({
-        url: "classes/cls_rent_invoice_detail.php",
-        type: "POST",
-        data: {
-            action: "reload_grid",
-            rent_invoice_id: rent_invoice_id
-        },
-        success: function(html) {
-            $('#detailGridContainer').html(html);
-        }
-    });
-}
-</script>
+    </script>
