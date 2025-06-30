@@ -660,6 +660,8 @@ if ($yearRow) {
           <input type="button" class="btn btn-primary" id="btn_search" name="btn_search" value="Search" onclick="window.location='srh_rent_invoice_master.php'">
           <input class="btn btn-secondary" type="button" id="btn_reset" name="btn_reset" value="Reset" onclick="document.getElementById('masterForm').reset();" >
             <input type="hidden" id="invoice_no_hidden" name="invoice_no" value="<?php echo $invoice_no_formatted; ?>">
+            <input type="hidden" name="rent_invoice_id" value="..." />
+<input type="hidden" name="transactionmode" value="U" />
         </div>
         <!-- /.box-footer -->
       </form>
@@ -1857,4 +1859,7 @@ document.getElementById("generate").addEventListener("click", function () {
     });
 });
 
+</script>
+    <script>
+let jsonData = <?php echo json_encode($_bll->_mdl->_array_itemdetail ?? []); ?>;
 </script>
