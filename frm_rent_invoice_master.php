@@ -32,6 +32,7 @@
         }
         $label="Add";
     }
+ 
 if (isset($_POST['ajax_get_lots']) && isset($_POST['customer_id']) && isset($_POST['invoice_type'])) {
     try {
         global $_dbh;
@@ -111,6 +112,7 @@ if ($yearRow) {
     echo "Database error: " . $e->getMessage();
 }
 ?>
+
 <!-- Add this CSS for multiselect, before </body> -->
 <style>
 .multiselect {
@@ -422,9 +424,15 @@ if ($yearRow) {
                           $field_str .= addNumber($fieldname, $value, $required_str, $disabled_str, $cls, $duplicate_str, $min_str, $step_str) . $error_container;
                         } else if ($fields_types[$i] == "select") {
                           $cls = "form-select $required_str $duplicate_str";
-                          if (!empty($dropdown_table[$i]) && !empty($label_column[$i]) && !empty($value_column[$i])) {
-                            $field_str .= getDropdown($dropdown_table[$i], $value_column[$i], $label_column[$i], $where_condition_val, $fieldname, $selected_val, $cls, $required_str) . $error_container;
-                          }
+                       if (!empty($dropdown_table[$i]) && !empty($label_column[$i]) && !empty($value_column[$i])) {
+        // Explicitly set selected_val for customer field
+        if ($fieldname == "customer" && $transactionmode == "U") {
+            $selected_val = isset($_bll->_mdl->_customer) ? $_bll->_mdl->_customer : "";
+        } else {
+            $selected_val = isset($_bll->_mdl->$cls_field_name) ? $_bll->_mdl->$cls_field_name : "";
+        }
+        $field_str .= getDropdown($dropdown_table[$i], $value_column[$i], $label_column[$i], $where_condition_val, $fieldname, $selected_val, $cls, $required_str) . $error_container;
+    }
                         } else {
                           if ($flag == 0) {
                             $field_str .= addInput($fields_types[$i], $fieldname, $value, $required_str, $disabled_str, $cls, $duplicate_str, $chk_str) . $error_container;
@@ -660,8 +668,6 @@ if ($yearRow) {
           <input type="button" class="btn btn-primary" id="btn_search" name="btn_search" value="Search" onclick="window.location='srh_rent_invoice_master.php'">
           <input class="btn btn-secondary" type="button" id="btn_reset" name="btn_reset" value="Reset" onclick="document.getElementById('masterForm').reset();" >
             <input type="hidden" id="invoice_no_hidden" name="invoice_no" value="<?php echo $invoice_no_formatted; ?>">
-            <input type="hidden" name="rent_invoice_id" value="..." />
-<input type="hidden" name="transactionmode" value="U" />
         </div>
         <!-- /.box-footer -->
       </form>
@@ -949,9 +955,46 @@ $(document).ready(function () {
     handleInvoiceTypeChange();
     $('input[name="invoice_type"]').change(handleInvoiceTypeChange);
 });
+    function setCustomerDropdown() {
+        if ($("#transactionmode").val() === "U") {
+            var customerId = "<?php echo isset($_bll->_mdl->_customer) ? $_bll->_mdl->_customer : ''; ?>";
+            console.log("Customer ID from model:", customerId);
+            
+            if (customerId) {
+                // First ensure dropdown is initialized
+                if ($("#customer").length) {
+                    // Use a small delay to ensure all options are loaded
+                    setTimeout(function() {
+                        $("#customer").val(customerId).trigger('change');
+                        console.log("Customer dropdown set to:", $("#customer").val());
+                        
+                        // Double-check if value was set properly
+                        if ($("#customer").val() != customerId) {
+                            $("#customer option").each(function() {
+                                if ($(this).val() == customerId) {
+                                    $(this).prop('selected', true);
+                                    $("#customer").trigger('change');
+                                    return false;
+                                }
+                            });
+                        }
+                    }, 300);
+                }
+            }
+        }
+    }
+
+    // Initialize customer dropdown
+    setCustomerDropdown();
+    
+    // If using AJAX to load options, also set after load
+    $(document).ajaxComplete(function() {
+        setCustomerDropdown();
+    });
 </script>  
 <script>
-document.addEventListener("DOMContentLoaded", function () {    
+document.addEventListener("DOMContentLoaded", function () {  
+    
     let jsonData = [];
     let editIndex = -1;
     let deleteData = [];
@@ -1743,7 +1786,17 @@ function updateTableRow(index, rowData) {
         }
     },200);
 });
-        
+});
+    $(document).ready(function () {
+    if ($("#transactionmode").val() === "U") {
+        console.log("Customer dropdown value on load: ", $("#customer").val());
+        var customerId = "<?php echo isset($_bll->_mdl->_customer) ? $_bll->_mdl->_customer : ''; ?>";
+        console.log("Customer ID from model: ", customerId);
+        if (customerId) {
+            $("#customer").val(customerId);
+            console.log("Set customer dropdown to: ", $("#customer").val());
+        }
+    }
 });
 </script>
 <script>
@@ -1805,7 +1858,7 @@ document.getElementById("generate").addEventListener("click", function () {
                         <td>${data.storage_duration ?? ''}</td>
                         <td>${data.rent_per_storage_duration ?? ''}</td>
                         <td>${data.rent_per ?? ''}</td>
-                       <td>${data.out_date_display ?? ''}</td>
+                        <td>${data.out_date_display ?? ''}</td>
                          <td>${data.charges_from_display ?? ''}</td>
                         <td>${data.charges_to_display ?? ''}</td>
                         <td>${data.act_month ?? ''}</td>
@@ -1830,7 +1883,7 @@ document.getElementById("generate").addEventListener("click", function () {
                         storage_duration: data.storage_duration ?? '',
                         rent_per_storage_duration: data.rent_per_storage_duration ?? '',
                         rent_per: data.rent_per ?? '',
-                         outward_date: data.out_date ?? null, // Use the Y-m-d formatted date
+                        outward_date: data.out_date ?? null, // Use the Y-m-d formatted date
     charges_from: data.charges_from ?? null,
     charges_to: data.charges_to ?? null,
                         actual_month: data.act_month ?? '',
@@ -1858,8 +1911,71 @@ document.getElementById("generate").addEventListener("click", function () {
         }
     });
 });
+// Attach this handler after your table is loaded (or delegate)
+$(document).on('click', '.edit-btn', function () {
+    var detailId = $(this).data('id');
+    $.ajax({
+        url: "classes/cls_rent_invoice_detail.php",
+        type: "POST",
+        data: {
+            action: "fetch_detail",
+            rent_invoice_detail_id: detailId
+        },
+        dataType: "json",
+        success: function (data) {
+            // Fill form fields (adjust IDs as per your form)
+            $('#rent_invoice_detail_id').val(data.rent_invoice_detail_id);
+            $('#rent_invoice_id').val(data.rent_invoice_id);
+            $('#description').val(data.description);
+            $('#qty').val(data.qty);
+            $('#unit').val(data.unit);
+            $('#weight').val(data.weight);
+            $('#rate_per_unit').val(data.rate_per_unit);
+            $('#amount').val(data.amount);
+            $('#remark').val(data.remark);
+            $('#inward_no').val(data.inward_no);
+            $('#inward_date').val(data.inward_date);
+            $('#lot_no').val(data.lot_no);
+            $('#item').val(data.item);
+            $('#marko').val(data.marko);
+            $('#invoice_qty').val(data.invoice_qty);
+            $('#unit_name').val(data.unit_name);
+            $('#wt_per_kg').val(data.wt_per_kg);
+            $('#storage_duration').val(data.storage_duration);
+            $('#rent_per_storage_duration').val(data.rent_per_storage_duration);
+            $('#rent_per').val(data.rent_per);
+            $('#outward_date').val(data.outward_date);
+            $('#charges_from').val(data.charges_from);
+            $('#charges_to').val(data.charges_to);
+            $('#actual_month').val(data.actual_month);
+            $('#actual_day').val(data.actual_day);
+            $('#invoice_month').val(data.invoice_month);
+            $('#invoice_day').val(data.invoice_day);
+            $('#invoice_amount').val(data.invoice_amount);
+            $('#invoice_for').val(data.invoice_for);
+            $('#gst_status').val(data.gst_status);
+            // Open edit modal (adjust ID as per your modal)
+            $('#editModal').modal('show');
+        },
+        error: function () {
+            Swal.fire("Error", "Could not fetch detail record for editing.", "error");
+        }
+    });
+});
 
-</script>
-    <script>
-let jsonData = <?php echo json_encode($_bll->_mdl->_array_itemdetail ?? []); ?>;
+// After save/update, reload the grid
+function reloadDetailGrid() {
+    var rent_invoice_id = $('#rent_invoice_id').val();
+    $.ajax({
+        url: "classes/cls_rent_invoice_detail.php",
+        type: "POST",
+        data: {
+            action: "reload_grid",
+            rent_invoice_id: rent_invoice_id
+        },
+        success: function(html) {
+            $('#detailGridContainer').html(html);
+        }
+    });
+}
 </script>
