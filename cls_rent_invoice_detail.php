@@ -139,7 +139,15 @@ class bll_rentinvoicedetail
         $_grid .= "</tbody>
         </table> ";
         return $_grid; 
-    }   
+    }  
+    
+     public function getDetailsByMasterId($master_id) {
+        global $_dbh;
+        $sql = "SELECT * FROM tbl_rent_invoice_detail WHERE rent_invoice_id = ?";
+        $stmt = $_dbh->prepare($sql);
+        $stmt->execute([$master_id]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
 }
 
 // AJAX: Outward-based (generate_details) grid for invoice generation
