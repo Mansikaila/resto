@@ -1,7 +1,6 @@
 <?php  
 include_once(__DIR__ . "/../config/connection.php");
 include("cls_rent_invoice_detail.php"); 
-
 class mdl_rentinvoicemaster 
 {   
     public $generator_table_layout;
@@ -63,10 +62,11 @@ class mdl_rentinvoicemaster
         }
     }
 
-    /** FOR DETAIL **/
-    public $_array_itemdetail;
-    public $_array_itemdelete;
-    /** \FOR DETAIL **/
+                    /** FOR DETAIL **/
+                    public $_array_itemdetail;
+                     public $_array_itemdelete;
+                    /** \FOR DETAIL **/
+                    
 }
 
 class bll_rentinvoicemaster                           
@@ -82,165 +82,186 @@ class bll_rentinvoicemaster
 
     public function dbTransaction()
     {
-        // Always MASTER first
         $this->_dal->dbTransaction($this->_mdl);
                
-        /** FOR DETAIL **/
+       /** FOR DETAIL **/
+               
         $_bllitem= new bll_rentinvoicedetail();
         if($this->_mdl->_transactionmode!="D")
         {
             if(!empty($this->_mdl->_array_itemdetail)) {
-                for($iterator= $this->_mdl->_array_itemdetail->getIterator();$iterator->valid();$iterator->next())
-                {
-                    $detailrow=$iterator->current();
-                    if(is_array($detailrow)) {
-                        foreach($detailrow as $name=>$value) {
-                            $_bllitem->_mdl->{$name}=$value;
+                    for($iterator= $this->_mdl->_array_itemdetail->getIterator();$iterator->valid();$iterator->next())
+                    {
+                            $detailrow=$iterator->current();
+                        if(is_array($detailrow)) {
+                            foreach($detailrow as $name=>$value) {
+                                $_bllitem->_mdl->{$name}=$value;
+                            }
                         }
+                        $_bllitem->_mdl->rent_invoice_id = $this->_mdl->_rent_invoice_id;
+                        $_bllitem->dbTransaction();
                     }
-                    // Always assign latest master id!
-                    $_bllitem->_mdl->rent_invoice_id = $this->_mdl->_rent_invoice_id;
-                    $_bllitem->dbTransaction();
-                }
             }
-            if(!empty($this->_mdl->_array_itemdelete)) {
+                if(!empty($this->_mdl->_array_itemdelete)) {
                 for($iterator= $this->_mdl->_array_itemdelete->getIterator();$iterator->valid();$iterator->next())
-                {
-                    $detailrow=$iterator->current();
-                    if(is_array($detailrow)) {
-                        foreach($detailrow as $name=>$value) {
-                            $_bllitem->_mdl->{$name}=$value;
+                    {
+                            $detailrow=$iterator->current();
+                        if(is_array($detailrow)) {
+                            foreach($detailrow as $name=>$value) {
+                                $_bllitem->_mdl->{$name}=$value;
+                            }
                         }
+                        $_bllitem->_mdl->rent_invoice_id = $this->_mdl->_rent_invoice_id;
+                        $_bllitem->dbTransaction();
                     }
-                    $_bllitem->_mdl->rent_invoice_id = $this->_mdl->_rent_invoice_id;
-                    $_bllitem->dbTransaction();
                 }
-            }
         }
-        /** \FOR DETAIL **/
+    /** \FOR DETAIL **/
         
-        if($this->_mdl->_transactionmode == "D")
-        {
+            
+       if($this->_mdl->_transactionmode =="D")
+       {
             if(!$_SESSION["sess_message"] || $_SESSION["sess_message"]=="") {
-                $_SESSION["sess_message"]="Record Deleted Successfully.";
-                $_SESSION["sess_message_cls"]="alert-success";
+               $_SESSION["sess_message"]="Record Deleted Successfully.";
+               $_SESSION["sess_message_cls"]="alert-success";
             }
             header("Location:../srh_rent_invoice_master.php");
-        }
-        if($this->_mdl->_transactionmode == "U")
-        {
+       }
+       if($this->_mdl->_transactionmode =="U")
+       {
             header("Location:../srh_rent_invoice_master.php");
-        }
-        if($this->_mdl->_transactionmode == "I")
-        {
+       }
+       if($this->_mdl->_transactionmode =="I")
+       {
             header("Location:../frm_rent_invoice_master.php");
-        }
-    }
+       }
 
-    public function fillModel() {
+    }
+  public function fillModel()
+    {
         $this->_dal->fillModel($this->_mdl);
-        // Load detail records for edit
-        $detail_bll = new bll_rentinvoicedetail();
-        $main_id = $this->_mdl->_rent_invoice_id;
-        if ($main_id) {
-            $detail_records = $detail_bll->getDetailsByMasterId($main_id);
-            $this->_mdl->_array_itemdetail = new ArrayObject($detail_records);
-        }
+      
     }
-
-    public function pageSearch() {
-        global $_dbh;
-        global $database_name;
+     
+    public function pageSearch()
+{
+    global $_dbh;
+    global $database_name;
     
-        $where_condition = "t.company_id=".COMPANY_ID;
-        $sql = "SELECT 
-            t.invoice_no, 
-            t.invoice_date, 
-            t6.value as val6, 
-            t7.customer_name as val7, 
-            CONCAT(t9.hsn_code_name, ' - ', t9.description) as val9, 
-            t.basic_amount, 
-            t16.value as val16, 
-            t.net_amount, 
-            t.sp_note, 
-            t.rent_invoice_id
-        FROM 
-            tbl_rent_invoice_master t 
-            INNER JOIN view_debit_cash t6 ON t.debit_cash=t6.id 
-            INNER JOIN tbl_customer_master t7 ON t.customer=t7.customer_id 
-            INNER JOIN tbl_hsn_code_master t9 ON t.hsn_code=t9.hsn_code_id 
-            INNER JOIN view_tax_amount t16 ON t.tax_amount=t16.id
-        WHERE 
-            {$where_condition}";
-        try {
-            $stmt = $_dbh->query($sql);
-            echo '<table id="searchMaster" class="ui celled table display">
-                <thead>
-                    <tr>
-                        <th>Action</th>
-                        <th>Invoice No<br><input type="text" data-index="3" placeholder="Search Invoice No" /></th>
-                        <th>Invoice Date<br><input type="text" data-index="4" placeholder="Search Invoice Date" /></th>
-                        <th>Debit/Cash<br><input type="text" data-index="6" placeholder="Search Debit/Cash" /></th>
-                        <th>Customer<br><input type="text" data-index="7" placeholder="Search Customer" /></th>
-                        <th>HSN Code<br><input type="text" data-index="9" placeholder="Search HSN Code" /></th>
-                        <th>Basic Amount<br><input type="text" data-index="12" placeholder="Search Basic Amount" /></th>
-                        <th>Tax Amount<br><input type="text" data-index="16" placeholder="Search Tax Amount" /></th>
-                        <th>Net Amount<br><input type="text" data-index="20" placeholder="Search Net Amount" /></th>
-                        <th>Sp Note<br><input type="text" data-index="21" placeholder="Search Sp Note" /></th>
-                    </tr>
-                </thead>
-                <tbody>';
-            $hasRecords = false;
-            foreach($stmt as $_rs) {
-                $hasRecords = true;
-                echo '<tr>
-                    <td>
-                        <form method="post" action="frm_rent_invoice_master.php" style="display:inline; margin-right:5px;">
-                            <i class="fa fa-edit update" style="cursor: pointer;"></i>
-                            <input type="hidden" name="rent_invoice_id" value="'.htmlspecialchars($_rs["rent_invoice_id"]).'" />
-                            <input type="hidden" name="transactionmode" value="U" />
-                        </form>
-                        <form method="post" action="classes/cls_rent_invoice_master.php" style="display:inline;">
-                            <i class="fa fa-trash delete" style="cursor: pointer;"></i>
-                            <input type="hidden" name="rent_invoice_id" value="'.htmlspecialchars($_rs["rent_invoice_id"]).'" />
-                            <input type="hidden" name="transactionmode" value="D" />
-                        </form>
-                    </td>';
-                echo '<td>'.htmlspecialchars($_rs["invoice_no"]).'</td>';
-                $invoiceDate = '';
-                if(!empty($_rs["invoice_date"])) {
-                    $invoiceDate = date("d/m/Y", strtotime($_rs["invoice_date"]));
-                    $invoiceDate .= '<br><small>'.date("h:i:s a", strtotime($_rs["invoice_date"])).'</small>';
-                }
-                echo '<td>'.$invoiceDate.'</td>';
-                echo '<td>'.htmlspecialchars($_rs["val6"]).'</td>';
-                echo '<td>'.htmlspecialchars($_rs["val7"]).'</td>';
-                echo '<td>'.htmlspecialchars($_rs["val9"]).'</td>';
-                echo '<td>'.htmlspecialchars($_rs["basic_amount"]).'</td>';
-                echo '<td>'.htmlspecialchars($_rs["val16"]).'</td>';
-                echo '<td>'.htmlspecialchars($_rs["net_amount"]).'</td>';
-                echo '<td>'.htmlspecialchars($_rs["sp_note"]).'</td>';
-                echo '</tr>';
+    $where_condition = "t.company_id=".COMPANY_ID;
+    
+    // DIRECT QUERY APPROACH (recommended)
+    $sql = "SELECT 
+        t.invoice_no, 
+        t.invoice_date, 
+        t6.value as val6, 
+        t7.customer_name as val7, 
+        CONCAT(t9.hsn_code_name, ' - ', t9.description) as val9, 
+        t.basic_amount, 
+        t16.value as val16, 
+        t.net_amount, 
+        t.sp_note, 
+        t.rent_invoice_id
+    FROM 
+        tbl_rent_invoice_master t 
+        INNER JOIN view_debit_cash t6 ON t.debit_cash=t6.id 
+        INNER JOIN tbl_customer_master t7 ON t.customer=t7.customer_id 
+        INNER JOIN tbl_hsn_code_master t9 ON t.hsn_code=t9.hsn_code_id 
+        INNER JOIN view_tax_amount t16 ON t.tax_amount=t16.id
+    WHERE 
+        {$where_condition}";
+    
+    // Debugging - uncomment to see the actual query
+    // error_log("SQL Query: ".$sql);
+    // echo "SQL Query: ".htmlspecialchars($sql); exit();
+    try {
+        $stmt = $_dbh->query($sql);
+        
+        // Build HTML table
+        echo '<table id="searchMaster" class="ui celled table display">
+            <thead>
+                <tr>
+                    <th>Action</th>
+                    <th>Invoice No<br><input type="text" data-index="3" placeholder="Search Invoice No" /></th>
+                    <th>Invoice Date<br><input type="text" data-index="4" placeholder="Search Invoice Date" /></th>
+                    <th>Debit/Cash<br><input type="text" data-index="6" placeholder="Search Debit/Cash" /></th>
+                    <th>Customer<br><input type="text" data-index="7" placeholder="Search Customer" /></th>
+                    <th>HSN Code<br><input type="text" data-index="9" placeholder="Search HSN Code" /></th>
+                    <th>Basic Amount<br><input type="text" data-index="12" placeholder="Search Basic Amount" /></th>
+                    <th>Tax Amount<br><input type="text" data-index="16" placeholder="Search Tax Amount" /></th>
+                    <th>Net Amount<br><input type="text" data-index="20" placeholder="Search Net Amount" /></th>
+                    <th>Sp Note<br><input type="text" data-index="21" placeholder="Search Sp Note" /></th>
+                </tr>
+            </thead>
+            <tbody>';
+        
+        $hasRecords = false;
+        foreach($stmt as $_rs) {
+            $hasRecords = true;
+            echo '<tr>
+                <td>
+                    <form method="post" action="frm_rent_invoice_master.php" style="display:inline; margin-right:5px;">
+                        <i class="fa fa-edit update" style="cursor: pointer;"></i>
+                        <input type="hidden" name="rent_invoice_id" value="'.htmlspecialchars($_rs["rent_invoice_id"]).'" />
+                        <input type="hidden" name="transactionmode" value="U" />
+                    </form>
+                    <form method="post" action="classes/cls_rent_invoice_master.php" style="display:inline;">
+                        <i class="fa fa-trash delete" style="cursor: pointer;"></i>
+                        <input type="hidden" name="rent_invoice_id" value="'.htmlspecialchars($_rs["rent_invoice_id"]).'" />
+                        <input type="hidden" name="transactionmode" value="D" />
+                    </form>
+                </td>';
+            
+            // Output each field with proper escaping
+            echo '<td>'.htmlspecialchars($_rs["invoice_no"]).'</td>';
+            
+            $invoiceDate = '';
+            if(!empty($_rs["invoice_date"])) {
+                $invoiceDate = date("d/m/Y", strtotime($_rs["invoice_date"]));
+                $invoiceDate .= '<br><small>'.date("h:i:s a", strtotime($_rs["invoice_date"])).'</small>';
             }
-            if(!$hasRecords) {
-                echo '<tr><td colspan="10">No records found</td></tr>';
-            }
-            echo '</tbody></table>';
-        } catch (PDOException $e) {
-            echo '<div class="alert alert-danger">Database Error: '.htmlspecialchars($e->getMessage()).'</div>';
-            error_log("Database Error in pageSearch(): ".$e->getMessage());
+            echo '<td>'.$invoiceDate.'</td>';
+            
+            // Output remaining fields
+            echo '<td>'.htmlspecialchars($_rs["val6"]).'</td>';
+            echo '<td>'.htmlspecialchars($_rs["val7"]).'</td>';
+            echo '<td>'.htmlspecialchars($_rs["val9"]).'</td>';
+            echo '<td>'.htmlspecialchars($_rs["basic_amount"]).'</td>';
+            echo '<td>'.htmlspecialchars($_rs["val16"]).'</td>';
+            echo '<td>'.htmlspecialchars($_rs["net_amount"]).'</td>';
+            echo '<td>'.htmlspecialchars($_rs["sp_note"]).'</td>';
+            
+            echo '</tr>';
         }
+        
+        if(!$hasRecords) {
+            echo '<tr><td colspan="10">No records found</td></tr>';
+        }
+        
+        echo '</tbody></table>';
+        
+    } catch (PDOException $e) {
+        echo '<div class="alert alert-danger">Database Error: '.htmlspecialchars($e->getMessage()).'</div>';
+        error_log("Database Error in pageSearch(): ".$e->getMessage());
     }
-
+}
+    
+    
+    
     public function checkDuplicate() {
         global $_dbh;
         global $database_name;
         $column_name="";$column_value="";$id_name="";$id_value="";$table_name="";
-        if(isset($_POST["column_name"])) $column_name=$_POST["column_name"];
-        if(isset($_POST["column_value"])) $column_value=$_POST["column_value"];
-        if(isset($_POST["id_name"])) $id_name=$_POST["id_name"];
-        if(isset($_POST["id_value"])) $id_value=$_POST["id_value"];
-        if(isset($_POST["table_name"])) $table_name=$_POST["table_name"];
+        if(isset($_POST["column_name"]))
+            $column_name=$_POST["column_name"];
+        if(isset($_POST["column_value"]))
+            $column_value=$_POST["column_value"];
+        if(isset($_POST["id_name"]))
+            $id_name=$_POST["id_name"];
+        if(isset($_POST["id_value"]))
+            $id_value=$_POST["id_value"];
+        if(isset($_POST["table_name"]))
+            $table_name=$_POST["table_name"];
         try {
             $sql="CAll ".$database_name."_check_duplicate('".$column_name."','".$column_value."','".$id_name."','".$id_value."','".$table_name."',@is_duplicate)";
             $stmt=$_dbh->prepare($sql);
@@ -251,6 +272,7 @@ class bll_rentinvoicemaster
             exit;
         }
         catch (PDOException $e) {
+            //echo "Error: " . $e->getMessage();
             echo 0;
             exit;
         }
@@ -258,58 +280,79 @@ class bll_rentinvoicemaster
         exit;
     }
 }
-
-class dal_rentinvoicemaster                         
+ class dal_rentinvoicemaster                         
 {
     public function dbTransaction($_mdl)                     
     {
         global $_dbh;
+
+        
         try {
             $_dbh->exec("set @p0 = ".$_mdl->_rent_invoice_id);
             $_pre=$_dbh->prepare("CALL rent_invoice_master_transaction (@p0,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ");
-            if(is_array($_mdl->generator_fields_names) && !empty($_mdl->generator_fields_names)){
-                foreach($_mdl->generator_fields_names as $i=>$fieldname)
-                {
-                    if($i==0)
-                        continue;
-                    $field=$_mdl->{"_".$fieldname};
-                    $_pre->bindValue($i,$field);
+            
+                if(is_array($_mdl->generator_fields_names) && !empty($_mdl->generator_fields_names)){
+                    foreach($_mdl->generator_fields_names as $i=>$fieldname)
+                    {
+                        if($i==0)
+                            continue;
+                        $field=$_mdl->{"_".$fieldname};
+                        $_pre->bindValue($i,$field);
+                    }
                 }
+                $_pre->bindValue($i+1,$_mdl->_transactionmode);
+                $_pre->execute();
+            } catch (PDOException $e) {
+                $_SESSION["sess_message"]=$e->getMessage();
+                $_SESSION["sess_message_cls"]="alert-danger";
             }
-            $_pre->bindValue($i+1,$_mdl->_transactionmode);
-            $_pre->execute();
-            if($_mdl->_transactionmode=="I") {
+        
+           /*** FOR DETAIL ***/
+           if($_mdl->_transactionmode=="I") {
+                // Retrieve the output parameter
                 $result = $_dbh->query("SELECT @p0 AS inserted_id");
+                // Get the inserted ID
                 $insertedId = $result->fetchColumn();
                 $_mdl->_rent_invoice_id=$insertedId;
             }
-        } catch (PDOException $e) {
-            $_SESSION["sess_message"]=$e->getMessage();
-            $_SESSION["sess_message_cls"]="alert-danger";
-        }
+            /*** /FOR DETAIL ***/
+    
     }
-    public function fillModel($_mdl)
-    {
-        global $_dbh;
-        $_pre=$_dbh->prepare("CALL rent_invoice_master_fillmodel (?) ");
-        $_pre->bindParam(1,$_REQUEST["rent_invoice_id"]);
-        $_pre->execute();
-        $_rs=$_pre->fetchAll(); 
-        if(!empty($_rs)) {
-            if(is_array($_mdl->generator_fields_names) && !empty($_mdl->generator_fields_names)){
-                foreach($_mdl->generator_fields_names as $i=>$fieldname)
-                {
-                    $_mdl->{"_".$fieldname}=$_rs[0][$fieldname];
+  public function fillModel($_mdl)
+{
+    global $_dbh;
+    $_pre = $_dbh->prepare("CALL rent_invoice_master_fillmodel (?) ");
+    $_pre->bindParam(1, $_REQUEST["rent_invoice_id"]);
+    $_pre->execute();
+    $_rs = $_pre->fetchAll(); 
+    if (!empty($_rs)) {
+        if (is_array($_mdl->generator_fields_names) && !empty($_mdl->generator_fields_names)) {
+            foreach ($_mdl->generator_fields_names as $i => $fieldname) {
+                $_mdl->{"_".$fieldname} = $_rs[0][$fieldname];
+                if ($fieldname == "customer") {
+                    error_log("Customer value fetched: " . $_rs[0][$fieldname]);
                 }
-                $_mdl->_transactionmode =$_REQUEST["transactionmode"];
             }
+            $_mdl->_transactionmode = $_REQUEST["transactionmode"];
         }
+    } else {
+        error_log("No record found for rent_invoice_id: " . $_REQUEST["rent_invoice_id"]);
     }
 }
+}
+
 
 $_bll=new bll_rentinvoicemaster();
-$_blldetail=new bll_rentinvoicedetail();
 
+/*** FOR DETAIL ***/
+$_blldetail=new bll_rentinvoicedetail();
+/*** /FOR DETAIL ***/
+if(isset($_REQUEST["action"]))
+{
+    $action=$_REQUEST["action"];
+    $_bll->$action();
+}
+// Add this to the actions section
 if(isset($_REQUEST["action"])) {
     $action=$_REQUEST["action"];
     if($action == "get_company_year") {
@@ -318,6 +361,7 @@ if(isset($_REQUEST["action"])) {
             $stmt = $_dbh->prepare("SELECT start_date, end_date FROM tbl_company_year_master WHERE company_year_id = ?");
             $stmt->execute([$companyYearId]);
             $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            
             if($row) {
                 echo json_encode([
                     'success' => true,
@@ -334,22 +378,15 @@ if(isset($_REQUEST["action"])) {
     }
     $_bll->$action();
 }
-
 if(isset($_POST["masterHidden"]) && ($_POST["masterHidden"]=="save"))
 {
-    // ---- FIX: Define $tmode at the start, before any usage ----
-    if(isset($_REQUEST["transactionmode"])) {
-        $tmode = $_REQUEST["transactionmode"];
-    } else {
-        $tmode = "I";
-    }
-
     if(is_array($_bll->_mdl->generator_fields_names) && !empty($_bll->_mdl->generator_fields_names)){
         foreach($_bll->_mdl->generator_fields_names as $i=>$fieldname)
         {
             if(isset($_REQUEST[$fieldname])) {
+                // Special handling for lot_no field which comes as array
                 if($fieldname == "lot_no" && is_array($_REQUEST[$fieldname])) {
-                    $field = implode(",", $_REQUEST[$fieldname]);
+                    $field = implode(",", $_REQUEST[$fieldname]); // Convert array to comma-separated string
                 } else {
                     $field = is_array($_REQUEST[$fieldname]) ? implode(",", $_REQUEST[$fieldname]) : trim($_REQUEST[$fieldname]);
                 }
@@ -364,19 +401,26 @@ if(isset($_POST["masterHidden"]) && ($_POST["masterHidden"]=="save"))
         }
     }
 
-    // Created/Modified user/date
-    if($tmode == "I") {
-        $_bll->_mdl->_created_by = isset($_SESSION['sess_user_id']) ? $_SESSION['sess_user_id'] : 1;
+    // Ensure created_by is set to a valid user ID
+    if($tmode == "I") { // Only for insert operations
+        $_bll->_mdl->_created_by = isset($_SESSION['sess_user_id']) ? $_SESSION['sess_user_id'] : 1; // Fallback to admin user if session not set
         $_bll->_mdl->_created_date = date('Y-m-d H:i:s');
     }
+    
+    // Always set modified_by and modified_date for updates
     $_bll->_mdl->_modified_by = isset($_SESSION['sess_user_id']) ? $_SESSION['sess_user_id'] : 1;
     $_bll->_mdl->_modified_date = date('Y-m-d H:i:s');
-    $_bll->_mdl->_transactionmode = $tmode;
-    $_bll->_mdl->_created_by = $_SESSION['sess_user_id'];
-    $_bll->_mdl->_modified_by = $_SESSION['sess_user_id'];
-    $_bll->_mdl->_company_year_id = $_SESSION['sess_company_year_id'];
-    $_bll->_mdl->_company_id = $_SESSION['sess_company_id'];
 
+    if(isset($_REQUEST["transactionmode"])) {
+        $tmode = $_REQUEST["transactionmode"];
+    } else {
+        $tmode = "I";
+    }
+    $_bll->_mdl->_transactionmode = $tmode;
+        $_bll->_mdl->_created_by = $_SESSION['sess_user_id'];
+    $_bll->_mdl->_modified_by = $_SESSION['sess_user_id'];
+        $_bll->_mdl->_company_year_id = $_SESSION['sess_company_year_id'];
+    $_bll->_mdl->_company_id = $_SESSION['sess_company_id'];
     /*** FOR DETAIL ***/
     $_bll->_mdl->_array_itemdetail = array();
     $_bll->_mdl->_array_itemdelete = array();
@@ -395,11 +439,12 @@ if(isset($_POST["masterHidden"]) && ($_POST["masterHidden"]=="save"))
         }
     }
     /*** \FOR DETAIL ***/
+    
     $_bll->dbTransaction();
 }
 
 if(isset($_REQUEST["transactionmode"]) && $_REQUEST["transactionmode"]=="D")       
 {   
-    $_bll->fillModel();
-    $_bll->dbTransaction();
-}   
+     $_bll->fillModel();
+     $_bll->dbTransaction();
+}
