@@ -9,7 +9,8 @@ class mdl_rentinvoicedetail
     public $qty;     
     public $unit;     
     public $weight;     
-    public $rate_per_unit;     
+    public $rate_per_unit;  
+    public $manual_rent_per;
     public $amount;     
     public $remark;     
     public $detailtransactionmode;
@@ -139,15 +140,7 @@ class bll_rentinvoicedetail
         $_grid .= "</tbody>
         </table> ";
         return $_grid; 
-    }  
-    
-     public function getDetailsByMasterId($master_id) {
-        global $_dbh;
-        $sql = "SELECT * FROM tbl_rent_invoice_detail WHERE rent_invoice_id = ?";
-        $stmt = $_dbh->prepare($sql);
-        $stmt->execute([$master_id]);
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    }
+    }   
 }
 
 // AJAX: Outward-based (generate_details) grid for invoice generation
@@ -196,19 +189,27 @@ if (isset($_POST['action']) && $_POST['action'] == 'generate_details') {
 
         $sql = "SELECT 
             im.inward_no AS in_no,
-            im.inward_date AS in_date,
+            DATE_FORMAT(im.inward_date, '%d-%m-%Y') AS in_date,
+            im.inward_date AS inward_date_db,
             i.lot_no,
+            itm.item_id AS item_id,
             itm.item_name AS item,
+            um.packing_unit_id AS unit_id,
+            um.packing_unit_name AS unit,
             i.marko,
             i.inward_qty AS qty,
-            um.packing_unit_name AS unit,
             i.inward_wt AS weight,
+            vsd.id AS storage_duration_id,
             vsd.value AS storage_duration,
             i.rent_per_storage_duration,
+            vrp.id AS rent_per_id,
             vrp.value AS rent_per,
-            COALESCE(MAX(om.outward_date), NULL) AS out_date,
-            im.inward_date AS charges_from,
-            COALESCE(MAX(om.outward_date), NULL) AS charges_to,
+            DATE_FORMAT(COALESCE(MAX(om.outward_date), CURDATE()), '%d-%m-%Y') AS out_date,
+            COALESCE(MAX(om.outward_date), CURDATE()) AS outward_date_db, 
+            DATE_FORMAT(im.inward_date, '%d-%m-%Y') AS charges_from,
+            im.inward_date AS charges_from_db,
+            DATE_FORMAT(COALESCE(MAX(om.outward_date), CURDATE()), '%d-%m-%Y') AS charges_to,
+            COALESCE(MAX(om.outward_date), CURDATE()) AS charges_to_db,
             TIMESTAMPDIFF(MONTH, im.inward_date, COALESCE(MAX(om.outward_date), CURDATE())) AS act_month,
             (DATEDIFF(COALESCE(MAX(om.outward_date), CURDATE()), im.inward_date) % 30) AS act_day,
             CASE 
@@ -226,14 +227,14 @@ if (isset($_POST['action']) && $_POST['action'] == 'generate_details') {
                 ELSE 'Stock'
             END AS invoice_for,
             itm.item_gst AS gst_status
-        FROM tbl_inward_detail i
-        JOIN tbl_inward_master im ON i.inward_id = im.inward_id
-        LEFT JOIN tbl_item_master itm ON i.item = itm.item_id
-        LEFT JOIN view_rent_type vrp ON i.rent_per = vrp.id
-        LEFT JOIN view_storage_duration vsd ON i.storage_duration = vsd.id  
-        LEFT JOIN tbl_packing_unit_master um ON i.packing_unit = um.packing_unit_id
-        LEFT JOIN tbl_outward_detail o ON o.inward_detail_id = i.inward_detail_id
-        LEFT JOIN tbl_outward_master om ON o.outward_id = om.outward_id";
+            FROM tbl_inward_detail i
+            JOIN tbl_inward_master im ON i.inward_id = im.inward_id
+            LEFT JOIN tbl_item_master itm ON i.item = itm.item_id
+            LEFT JOIN view_rent_type vrp ON i.rent_per = vrp.id
+            LEFT JOIN view_storage_duration vsd ON i.storage_duration = vsd.id  
+            LEFT JOIN tbl_packing_unit_master um ON i.packing_unit = um.packing_unit_id
+            LEFT JOIN tbl_outward_detail o ON o.inward_detail_id = i.inward_detail_id
+            LEFT JOIN tbl_outward_master om ON o.outward_id = om.outward_id";
 
         if (!empty($where_conditions)) {
             $sql .= " WHERE " . implode(" AND ", $where_conditions);
@@ -252,23 +253,6 @@ if (isset($_POST['action']) && $_POST['action'] == 'generate_details') {
 
         // === AMOUNT CALCULATION LOGIC START ===
         foreach ($results as &$row) {
-            // Format dates for database storage (Y-m-d)
-            $row['in_date'] = $row['in_date'] ? date('Y-m-d', strtotime($row['in_date'])) : null;
-            $row['out_date'] = $row['out_date'] ? date('Y-m-d', strtotime($row['out_date'])) : null;
-            
-            // Set charges_from and charges_to
-            $charges_from = $row['in_date'];
-            $charges_to = $row['out_date'] ?: date('Y-m-d');
-            $row['charges_from'] = $charges_from;
-            $row['charges_to'] = $charges_to;
-            
-            // Create display versions of dates (d-m-Y)
-            $row['in_date_display'] = $row['in_date'] ? date('d-m-Y', strtotime($row['in_date'])) : '';
-            $row['out_date_display'] = $row['out_date'] ? date('d-m-Y', strtotime($row['out_date'])) : '';
-            $row['charges_from_display'] = date('d-m-Y', strtotime($charges_from));
-            $row['charges_to_display'] = date('d-m-Y', strtotime($charges_to));
-
-            // Rest of your calculation logic
             $qty = floatval($row['qty']);
             $rent = floatval($row['rent_per_storage_duration']);
             $storage_duration = strtolower(trim($row['storage_duration']));
@@ -276,13 +260,13 @@ if (isset($_POST['action']) && $_POST['action'] == 'generate_details') {
             $inv_day = intval($row['invoice_day']);
             $act_month = intval($row['act_month']);
             $act_day = intval($row['act_day']);
-            $charges_from_dt = new DateTime($charges_from);
-            $charges_to_dt = new DateTime($charges_to);
-            $interval = $charges_from_dt->diff($charges_to_dt);
+            $charges_from = new DateTime($row['charges_from']);
+            $charges_to = new DateTime($row['charges_to']);
+            $interval = $charges_from->diff($charges_to);
             $days_diff = $interval->days + 1; // Include end date
-            $total_days = $days_diff;
-            $row['act_month'] = floor($days_diff / 30);
-            $row['act_day'] = $days_diff % 30;
+            $total_days = $days_diff; // Use inclusive days for calculations
+            $row['act_month'] = floor($days_diff / 30); // Override act_month
+            $row['act_day'] = $days_diff % 30; // Override act_day
             $amount = 0;
 
             if (strpos($storage_duration, 'daily') !== false) {
@@ -295,19 +279,22 @@ if (isset($_POST['action']) && $_POST['action'] == 'generate_details') {
                 $row['invoice_month'] = $fortnights;
                 $row['invoice_day'] = 15;
             } elseif ($storage_duration === '1 month 1 day') {
+                // Handle "1 Month 1 Day" specifically
                 if ($days_diff >= 31) {
-                    $rent_per_day = $rent / 30;
-                    $inv_month = 1;
-                    $inv_day = $days_diff - 30;
+                    $rent_per_day = $rent / 30; // Calculate daily rent
+                    $inv_month = 1; // First 31 days count as 1 month
+                    $inv_day = $days_diff - 30; // Remaining days
                     $amount = ($qty * $rent * $inv_month) + ($qty * $rent_per_day * $inv_day);
                     $row['invoice_month'] = $inv_month;
                     $row['invoice_day'] = $inv_day;
                 } else {
+                    // Skip calculation if less than 31 days
                     $amount = 0;
                     $row['invoice_month'] = 0;
                     $row['invoice_day'] = $days_diff;
                 }
             } elseif ($storage_duration === '1 month 15 days') {
+                // Skip calculation for "1 Month 15 Days"
                 $amount = 0;
                 $row['invoice_month'] = 0;
                 $row['invoice_day'] = $days_diff;
@@ -340,36 +327,37 @@ class dal_rentinvoicedetail
 
         try {
             $_dbh->exec("SET @p0 = " . (int)$_mdl->rent_invoice_detail_id);
-            $_pre = $_dbh->prepare("CALL rent_invoice_detail_transaction (@p0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?)");
+            $_pre = $_dbh->prepare("CALL rent_invoice_detail_transaction (@p0, ?, ?, ?, ?, ?, ?, ?,?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?)");
             $_pre->bindParam(1, $_mdl->rent_invoice_id);
             $_pre->bindParam(2, $_mdl->description);
             $_pre->bindParam(3, $_mdl->qty);
             $_pre->bindParam(4, $_mdl->unit);
             $_pre->bindParam(5, $_mdl->weight);
             $_pre->bindParam(6, $_mdl->rate_per_unit);
-            $_pre->bindParam(7, $_mdl->amount);
-            $_pre->bindParam(8, $_mdl->remark);
-            $_pre->bindParam(9, $_mdl->inward_no);
-            $_pre->bindParam(10, $_mdl->inward_date);
-            $_pre->bindParam(11, $_mdl->lot_no);
-            $_pre->bindParam(12, $_mdl->item);
-            $_pre->bindParam(13, $_mdl->marko);
-            $_pre->bindParam(14, $_mdl->invoice_qty);
-            $_pre->bindParam(15, $_mdl->unit_name);
-            $_pre->bindParam(16, $_mdl->wt_per_kg);
-            $_pre->bindParam(17, $_mdl->storage_duration);
-            $_pre->bindParam(18, $_mdl->rent_per_storage_duration);
-            $_pre->bindParam(19, $_mdl->rent_per);
-            $_pre->bindParam(20, $_mdl->outward_date);
-            $_pre->bindParam(21, $_mdl->charges_from);
-            $_pre->bindParam(22, $_mdl->charges_to);
-            $_pre->bindParam(23, $_mdl->actual_month);
-            $_pre->bindParam(24, $_mdl->actual_day);
-            $_pre->bindParam(25, $_mdl->invoice_month);
-            $_pre->bindParam(26, $_mdl->invoice_day);
-            $_pre->bindParam(27, $_mdl->invoice_amount);
-            $_pre->bindParam(28, $_mdl->invoice_for);
-            $_pre->bindParam(29, $_mdl->detailtransactionmode);
+            $_pre->bindParam(7, $_mdl->manual_rent_per);
+            $_pre->bindParam(8, $_mdl->amount);
+            $_pre->bindParam(9, $_mdl->remark);
+            $_pre->bindParam(10, $_mdl->inward_no);
+            $_pre->bindParam(11, $_mdl->inward_date);
+            $_pre->bindParam(12, $_mdl->lot_no);
+            $_pre->bindParam(13, $_mdl->item);
+            $_pre->bindParam(14, $_mdl->marko);
+            $_pre->bindParam(15, $_mdl->invoice_qty);
+            $_pre->bindParam(16, $_mdl->unit_name);
+            $_pre->bindParam(17, $_mdl->wt_per_kg);
+            $_pre->bindParam(18, $_mdl->storage_duration);
+            $_pre->bindParam(19, $_mdl->rent_per_storage_duration);
+            $_pre->bindParam(20, $_mdl->rent_per);
+            $_pre->bindParam(21, $_mdl->outward_date);
+            $_pre->bindParam(22, $_mdl->charges_from);
+            $_pre->bindParam(23, $_mdl->charges_to);
+            $_pre->bindParam(24, $_mdl->actual_month);
+            $_pre->bindParam(25, $_mdl->actual_day);
+            $_pre->bindParam(26, $_mdl->invoice_month);
+            $_pre->bindParam(27, $_mdl->invoice_day);
+            $_pre->bindParam(28, $_mdl->invoice_amount);
+            $_pre->bindParam(29, $_mdl->invoice_for);
+            $_pre->bindParam(30, $_mdl->detailtransactionmode);
             $_pre->execute();
         } catch (PDOException $e) {
             error_log("Error in dal_rentinvoicedetail::dbTransaction: " . $e->getMessage());
