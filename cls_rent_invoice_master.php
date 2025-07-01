@@ -89,18 +89,19 @@ class bll_rentinvoicemaster
         $_bllitem= new bll_rentinvoicedetail();
         if($this->_mdl->_transactionmode!="D")
         {
+                if (!empty($this->_mdl->_rent_invoice_id)) {
             if(!empty($this->_mdl->_array_itemdetail)) {
-                    for($iterator= $this->_mdl->_array_itemdetail->getIterator();$iterator->valid();$iterator->next())
-                    {
-                            $detailrow=$iterator->current();
-                        if(is_array($detailrow)) {
-                            foreach($detailrow as $name=>$value) {
-                                $_bllitem->_mdl->{$name}=$value;
-                            }
+                for($iterator= $this->_mdl->_array_itemdetail->getIterator();$iterator->valid();$iterator->next())
+                {
+                    $detailrow=$iterator->current();
+                    if(is_array($detailrow)) {
+                        foreach($detailrow as $name=>$value) {
+                            $_bllitem->_mdl->{$name}=$value;
                         }
-                        $_bllitem->_mdl->rent_invoice_id = $this->_mdl->_rent_invoice_id;
-                        $_bllitem->dbTransaction();
                     }
+                    $_bllitem->_mdl->rent_invoice_id = $this->_mdl->_rent_invoice_id;
+                    $_bllitem->dbTransaction();
+                }
             }
                 if(!empty($this->_mdl->_array_itemdelete)) {
                 for($iterator= $this->_mdl->_array_itemdelete->getIterator();$iterator->valid();$iterator->next())
@@ -116,6 +117,9 @@ class bll_rentinvoicemaster
                     }
                 }
         }
+        }
+   
+
     /** \FOR DETAIL **/
         
             
@@ -406,30 +410,42 @@ if(isset($_POST["masterHidden"]) && ($_POST["masterHidden"]=="save"))
     }
 
     // Ensure created_by is set to a valid user ID
-    if($tmode == "I") { // Only for insert operations
-        $_bll->_mdl->_created_by = isset($_SESSION['sess_user_id']) ? $_SESSION['sess_user_id'] : 1; // Fallback to admin user if session not set
-        $_bll->_mdl->_created_date = date('Y-m-d H:i:s');
-    }
+//    if($tmode == "I") { // Only for insert operations
+//        $_bll->_mdl->_created_by = isset($_SESSION['sess_user_id']) ? $_SESSION['sess_user_id'] : 1; // Fallback to admin user if session not set
+//        $_bll->_mdl->_created_date = date('Y-m-d H:i:s');
+//    }
     
     // Always set modified_by and modified_date for updates
     $_bll->_mdl->_modified_by = isset($_SESSION['sess_user_id']) ? $_SESSION['sess_user_id'] : 1;
     $_bll->_mdl->_modified_date = date('Y-m-d H:i:s');
 
-    if(isset($_REQUEST["transactionmode"])) {
-        $tmode = $_REQUEST["transactionmode"];
-    } else {
-        $tmode = "I";
-    }
+   if(isset($_REQUEST["transactionmode"])) {
+    $tmode = $_REQUEST["transactionmode"];
+} else {
+    $tmode = "I";
+}
+$_bll->_mdl->_transactionmode = $tmode;
+
+// Ensure created_by is set to a valid user ID
+if($tmode == "I") { // Only for insert operations
+    $_bll->_mdl->_created_by = isset($_SESSION['sess_user_id']) ? $_SESSION['sess_user_id'] : 1;
+    $_bll->_mdl->_created_date = date('Y-m-d H:i:s');
+}
     $_bll->_mdl->_transactionmode = $tmode;
         $_bll->_mdl->_created_by = $_SESSION['sess_user_id'];
     $_bll->_mdl->_modified_by = $_SESSION['sess_user_id'];
         $_bll->_mdl->_company_year_id = $_SESSION['sess_company_year_id'];
     $_bll->_mdl->_company_id = $_SESSION['sess_company_id'];
+    
+    if ($tmode == "U" && empty($_bll->_mdl->_rent_invoice_id) && isset($_REQUEST["rent_invoice_id"])) {
+        $_bll->_mdl->_rent_invoice_id = $_REQUEST["rent_invoice_id"];
+    }
     /*** FOR DETAIL ***/
     $_bll->_mdl->_array_itemdetail = array();
     $_bll->_mdl->_array_itemdelete = array();
     if(isset($_REQUEST["detail_records"])) {
         $detail_records = json_decode($_REQUEST["detail_records"], true);
+        
         if(!empty($detail_records)) {
             $arrayobject = new ArrayObject($detail_records);
             $_bll->_mdl->_array_itemdetail = $arrayobject;
