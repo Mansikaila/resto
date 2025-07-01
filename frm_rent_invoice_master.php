@@ -1236,6 +1236,8 @@ if ($yearRow) {
             if (index >= 0) {
                 editIndex = index;
                 const data = jsonData[index];
+                
+                
 
                 for (let key in data) {
                     const inputFields = form.elements[key]; // May return NodeList if multiple inputs exist
@@ -1735,6 +1737,10 @@ toggleManualInvoiceDetails();
                     });
                 }
 
+                var masterRentInvoiceId = document.getElementById("rent_invoice_id") ? document.getElementById("rent_invoice_id").value : "";
+allDetailRecords.forEach(function(record) {
+    record.rent_invoice_id = masterRentInvoiceId;
+});
                 const jsonDataString = JSON.stringify(allDetailRecords);
                 document.getElementById("detail_records").value = jsonDataString;
                 const deletedDataString = JSON.stringify(deleteData);
@@ -1753,6 +1759,9 @@ toggleManualInvoiceDetails();
                 (async function() {
                   result=await Swal.fire(title, message, icon);
                     if (result.isConfirmed) {
+                        console.log("detail_records value:", document.getElementById("detail_records").value);
+                    alert("detail_records value:\n" + document.getElementById("detail_records").value);
+
                     $("#masterForm").submit();
                     }
                 })();
