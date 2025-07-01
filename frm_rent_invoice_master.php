@@ -551,11 +551,15 @@ if ($yearRow) {
                       </div>
                         <div id="generated-invoice-details" style="display:none;"></div>
                         <div class="box-detail" id="manual-invoice-details" style="display:none;">
-                          <?php
-                          $_blldetail = new bll_rentinvoicedetail();
-                          $detailHtml = $_blldetail->pageSearch();
-                          echo $detailHtml ? $detailHtml : '';
-                          ?>
+                             <?php
+    $_blldetail = new bll_rentinvoicedetail();
+    if(isset($_bll->_mdl->_rent_invoice_id)) {
+        $_blldetail->_mdl->rent_invoice_id = $_bll->_mdl->_rent_invoice_id;
+    }
+    $detailHtml = $_blldetail->pageSearch();
+    echo $detailHtml ? $detailHtml : '';
+    ?>
+
                           <button type="button" name="detailBtn" id="detailBtn" class="btn btn-primary add"
                               data-bs-toggle="modal" data-bs-target="#modalDialog" onclick="openModal()">
                               Add Detail Record
@@ -1593,21 +1597,28 @@ if ($yearRow) {
         }
         //DONE
         //MANUAL MODEL
-        function toggleManualInvoiceDetails() {
-        var selected = $('#invoice_for').val();
-        if (selected === '5') { 
-          $('#manual-invoice-details').show();
-          $('#generate-btn-wrap').show(); 
-          $('#generate').prop('disabled', true);
-        } else {
-          $('#manual-invoice-details').hide();
-          $('#generate-btn-wrap').show();
-          $('#generate').prop('disabled', false); 
-        }
-      }
-          $('#invoice_for').val('1'); 
-          toggleManualInvoiceDetails();
-          $('#invoice_for').on('change', toggleManualInvoiceDetails);
+            function toggleManualInvoiceDetails() {
+  var selected = $('#invoice_for').val();
+  if (selected === '5') { 
+    $('#manual-invoice-details').show();
+    $('#generate-btn-wrap').show(); 
+    $('#generate').prop('disabled', true);
+  } else {
+    $('#manual-invoice-details').hide();
+    $('#generate-btn-wrap').show();
+    $('#generate').prop('disabled', false); 
+  }
+}
+$('#invoice_for').on('change', toggleManualInvoiceDetails);
+// On page load:
+toggleManualInvoiceDetails();
+        $(document).ready(function() {
+  toggleManualInvoiceDetails();
+  $('#invoice_for').on('change', toggleManualInvoiceDetails);
+});
+//          $('#invoice_for').val('1'); 
+//          toggleManualInvoiceDetails();
+//          $('#invoice_for').on('change', toggleManualInvoiceDetails);
         //DONE
 
         function deleteRow(index,id) {
