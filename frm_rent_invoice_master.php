@@ -236,6 +236,8 @@ if ($yearRow) {
                   for ($i = 0; $i < count($fields_names); $i++) {
                     $fieldname = $fields_names[$i];
                     $value = "";
+                      
+                      
                     // Standard rendering invoice_type-drashti
                    if ($fieldname == "invoice_type") {
                         echo '<div class="row align-items-center mb-3 mt-3">';
@@ -278,6 +280,9 @@ if ($yearRow) {
                       $show_generate_btn = true;
                       continue;
                     }
+                      
+                      
+                      
                     // Layout logic
                     $table_layout = $old_table_layout;
                     $required = "";
