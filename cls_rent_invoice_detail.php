@@ -96,23 +96,20 @@ class bll_rentinvoicedetail
                     <button class=\"btn btn-info btn-sm me-2 edit-btn\" data-id=\"".$detail_id."\" data-index=\"".$i."\">Edit</button>
                     <button class=\"btn btn-danger btn-sm delete-btn\" data-id=\"".$detail_id."\" data-index=\"".$i."\">Delete</button>
                 </td>";
-                $_grid .= "
-                <td data-label=\"rent_invoice_id\" style=\"display:none\">".$_rs['rent_invoice_id']."</td>"; 
-                $_grid .= "
-                <td data-label=\"description\"> ".$_rs['description']." </td>"; 
-                $_grid .= "
-                <td data-label=\"qty\"> ".$_rs['qty']." </td>"; 
-                $_grid .= "
-                <td data-label=\"unit\"> ".$_rs['unit']." </td>"; 
-                $_grid .= "
-                <td data-label=\"weight\" style=\"display:none\">".$_rs['weight']."</td>"; 
-                $_grid .= "
-                <td data-label=\"rate_per_unit\"> ".$_rs['rate_per_unit']." </td>"; 
-                $_grid .= "
-                <td data-label=\"amount\"> ".$_rs['amount']." </td>"; 
-                $_grid .= "
-                <td data-label=\"remark\"> ".$_rs['remark']." </td>"; 
-                $_grid .= "</tr>\n";
+                 $_grid .= "
+            <td data-label=\"rent_invoice_id\" style=\"display:none\">".($_rs['rent_invoice_id'] ?? '')."</td>"; 
+            $_grid .= "
+            <td data-label=\"description\"> ".($_rs['description'] ?? '')." </td>"; 
+           $_grid .= "<td data-label=\"qty\"> ".($_rs['qty'] ?? '')." </td>";
+            $_grid .= "
+            <td data-label=\"unit\"> ".($_rs['unit'] ?? '')." </td>"; 
+         $_grid .= "<td data-label=\"weight\" style=\"display:none\">".($_rs['weight'] ?? '')."</td>";
+           $_grid .= "<td data-label=\"rate_per_unit\"> ".($_rs['rate_per_unit'] ?? '')." </td>";
+            $_grid .= "
+            <td data-label=\"amount\"> ".($_rs['amount'] ?? '')." </td>"; 
+            $_grid .= "
+            <td data-label=\"remark\"> ".($_rs['remark'] ?? '')." </td>"; 
+            $_grid .= "</tr>\n";
                 $i++;
             }
             if ($i == 0) {
