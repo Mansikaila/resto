@@ -338,6 +338,10 @@ class bll_rentinvoicemaster
     } else {
         error_log("No record found for rent_invoice_id: " . $_REQUEST["rent_invoice_id"]);
     }
+      
+//      echo"<pre>";
+//      print_r($_mdl);
+//      echo"</pre>";
 }
 }
 
