@@ -82,6 +82,7 @@ class bll_rentinvoicemaster
 
     public function dbTransaction()
     {
+        
         $this->_dal->dbTransaction($this->_mdl);
                
        /** FOR DETAIL **/
@@ -100,6 +101,7 @@ class bll_rentinvoicemaster
                         }
                     }
                     $_bllitem->_mdl->rent_invoice_id = $this->_mdl->_rent_invoice_id;
+                  
                     $_bllitem->dbTransaction();
                 }
             }
@@ -113,6 +115,10 @@ class bll_rentinvoicemaster
                             }
                         }
                         $_bllitem->_mdl->rent_invoice_id = $this->_mdl->_rent_invoice_id;
+//                        error_log("MASTER MODEL FIELDS at update/insert:\n" . print_r($this->_mdl, true));
+//    error_log("Update mode: " . $this->_mdl->_transactionmode . ", rent_invoice_id: " . $this->_mdl->_rent_invoice_id);
+//                     error_log("MASTER MODEL FIELDS (fields property) at update/insert:\n" . print_r($this->_mdl->fields, true));
+//    $this->_dal->dbTransaction($this->_mdl);
                         $_bllitem->dbTransaction();
                     }
                 }
@@ -424,22 +430,24 @@ if(isset($_POST["masterHidden"]) && ($_POST["masterHidden"]=="save"))
 } else {
     $tmode = "I";
 }
-$_bll->_mdl->_transactionmode = $tmode;
+//$_bll->_mdl->_transactionmode = $tmode;
+    $_bll->_mdl->_transactionmode ="U";
 
 // Ensure created_by is set to a valid user ID
 if($tmode == "I") { // Only for insert operations
     $_bll->_mdl->_created_by = isset($_SESSION['sess_user_id']) ? $_SESSION['sess_user_id'] : 1;
     $_bll->_mdl->_created_date = date('Y-m-d H:i:s');
 }
-    $_bll->_mdl->_transactionmode = $tmode;
+//    $_bll->_mdl->_transactionmode = $tmode;
+     $_bll->_mdl->_transactionmode ="U";
         $_bll->_mdl->_created_by = $_SESSION['sess_user_id'];
     $_bll->_mdl->_modified_by = $_SESSION['sess_user_id'];
         $_bll->_mdl->_company_year_id = $_SESSION['sess_company_year_id'];
     $_bll->_mdl->_company_id = $_SESSION['sess_company_id'];
     
-    if ($tmode == "U" && empty($_bll->_mdl->_rent_invoice_id) && isset($_REQUEST["rent_invoice_id"])) {
-        $_bll->_mdl->_rent_invoice_id = $_REQUEST["rent_invoice_id"];
-    }
+   if ($tmode == "U" && empty($_bll->_mdl->_rent_invoice_id) && isset($_REQUEST["rent_invoice_id"])) {
+    $_bll->_mdl->_rent_invoice_id = $_REQUEST["rent_invoice_id"];
+}
     /*** FOR DETAIL ***/
     $_bll->_mdl->_array_itemdetail = array();
     $_bll->_mdl->_array_itemdelete = array();
@@ -460,6 +468,7 @@ if($tmode == "I") { // Only for insert operations
     /*** \FOR DETAIL ***/
     
     $_bll->dbTransaction();
+    
 }
 
 if(isset($_REQUEST["transactionmode"]) && $_REQUEST["transactionmode"]=="D")       
