@@ -1237,6 +1237,8 @@ if ($yearRow) {
             if (index >= 0) {
                 editIndex = index;
                 const data = jsonData[index];
+//                  // 👇👇👇 ADD THIS LINE 👇👇👇
+//        console.log("Edit data at index", index, data);
 
                 for (let key in data) {
                     const inputFields = form.elements[key]; // May return NodeList if multiple inputs exist
@@ -1275,74 +1277,77 @@ if ($yearRow) {
             }, 10);
         }
 
-        function saveData() {
+function saveData() {
+    const formData = new FormData(form);
+    const newEntry = {};
+    const allEntries = {};
 
-            const formData = new FormData(form);
-            const newEntry = {};
-            const allEntries= {};
-
-             // Convert form data to object (excluding hidden fields)
-              for (const [key, value] of formData.entries()) {
-                if (!getHiddenFields().includes(key) && getDisplayFields().includes(key)) {
-                    newEntry[key] = value;
-                } 
-                if (editIndex >= 0) {
-                    if(jsonData[editIndex].hasOwnProperty(key)) {
-                        jsonData[editIndex][key] = value;
-                    } 
-                }
-                allEntries[key]=value;
-              }
-
-            if($("#norecords").length>0) {
-                $("#norecords").remove();
-            }
-
-            if (editIndex >= 0) {
-                updateTableRow(editIndex, newEntry);
-                modal.hide();
-                Swal.fire({
-                    icon: "success",
-                    title: "Updated Successfully",
-                    text: "The record has been updated successfully!",
-                    showConfirmButton: true,
-                    showClass: {
-                        popup: ""
-                    },
-                    hideClass: {
-                        popup: ""
-                    }
-                }).then((result) => {
-                     setFocustAfterClose();
-                });
-            } else {
-                allEntries["detailtransactionmode"]="I";
-                jsonData.push(allEntries);
-                appendTableRow(newEntry, jsonData.length - 1);
-                modal.hide();
-                Swal.fire({
-                    icon: "success",
-                    title: "Added Successfully",
-                    text: "The record has been added successfully!",
-                    showConfirmButton: true,
-                    showClass: {
-                        popup: ""
-                    },
-                    hideClass: {
-                        popup: ""
-                    }
-                }).then((result) => {
-                      if (result.isConfirmed) {
-                        modal.show();
-                        setTimeout(() => {
-                            const firstInput = form.querySelector("input:not([type=hidden]), input:not(.btn-close)");
-                            if (firstInput) firstInput.focus();
-                        }, 100);
-                      }
-                });
-            }
-            clearForm(form);
+    // Convert form data to object (excluding hidden fields)
+    for (const [key, value] of formData.entries()) {
+        if (!getHiddenFields().includes(key) && getDisplayFields().includes(key)) {
+            newEntry[key] = value;
         }
+        if (editIndex >= 0) {
+            if(jsonData[editIndex].hasOwnProperty(key)) {
+                jsonData[editIndex][key] = value;
+            }
+        }
+        allEntries[key]=value;
+    }
+
+    if($("#norecords").length>0) {
+        $("#norecords").remove();
+    }
+
+    if (editIndex >= 0) {
+        // Set mode and preserve PK for detail
+        newEntry["detailtransactionmode"] = "U";
+        newEntry["rent_invoice_detail_id"] = jsonData[editIndex]["rent_invoice_detail_id"]; // critical for update
+        jsonData[editIndex] = newEntry;
+        updateTableRow(editIndex, newEntry);
+        modal.hide();
+        Swal.fire({
+            icon: "success",
+            title: "Updated Successfully",
+            text: "The record has been updated successfully!",
+            showConfirmButton: true,
+            showClass: {
+                popup: ""
+            },
+            hideClass: {
+                popup: ""
+            }
+        }).then((result) => {
+            setFocustAfterClose();
+        });
+    } else {
+        allEntries["detailtransactionmode"]="I";
+        jsonData.push(allEntries);
+        appendTableRow(newEntry, jsonData.length - 1);
+        modal.hide();
+        Swal.fire({
+            icon: "success",
+            title: "Added Successfully",
+            text: "The record has been added successfully!",
+            showConfirmButton: true,
+            showClass: {
+                popup: ""
+            },
+            hideClass: {
+                popup: ""
+            }
+        }).then((result) => {
+            if (result.isConfirmed) {
+                modal.show();
+                setTimeout(() => {
+                    const firstInput = form.querySelector("input:not([type=hidden]), input:not(.btn-close)");
+                    if (firstInput) firstInput.focus();
+                }, 100);
+            }
+        });
+    }
+    clearForm(form);
+}
         function getHiddenFields() {
 
             let hiddenFields = Array.from(form.elements)
@@ -1879,3 +1884,4 @@ toggleManualInvoiceDetails();
     });
 
     </script>
+
