@@ -94,7 +94,6 @@ if (isset($_POST['ajax_get_lots']) && isset($_POST['customer_id']) && isset($_PO
     }
 }
 global $_dbh;
-// With this:
 if ($transactionmode == "U") {
     $next_invoice_sequence = $_bll->_mdl->_rent_invoice_sequence;
     $invoice_no_formatted = $_bll->_mdl->_invoice_no;
@@ -188,7 +187,6 @@ if ($transactionmode == "U") {
 <?php
     include("include/navigation.php");
 ?>
-    <!-- Full Width Column -->
   <div class="content-wrapper">
     <div class="container-fluid">
       <!-- Content Header (Page header) -->
@@ -249,14 +247,10 @@ if ($transactionmode == "U") {
                 }
                 $side_by_side_started = false;
 
-                // Define the custom layout fields
                 $row1_fields = ['basic_amount', 'net_amount'];
                 $row2_fields = ['tax_amount', 'sgst', 'cgst', 'igst'];
                 $row3_fields = ['unloading_exp', 'loading_exp', 'other_expense3', 'sp_note'];
-
-                // Store fields for custom layout
                 $custom_fields = [];
-                // Track when to show Generate Invoice button
                 $show_generate_btn = false;
 
                 if (is_array($fields_names) && !empty($fields_names)) {
@@ -287,24 +281,33 @@ if ($transactionmode == "U") {
                         continue;
                     }
                       //Mansi-Lot_no
-                      if ($fieldname == "lot_no") {
-                      ?>
+                     if ($fieldname == "lot_no") {
+                        ?>
                         <label for="lot_no" class="col-4 col-sm-2 col-md-1 col-lg-1 form-label">Lot No</label>
                         <div class="col-8 col-sm-4 col-md-3 col-lg-2">
-                        <div id="lotNoMultiselect" class="multiselect position-relative">
-                            <div id="lotNoSelectLabel" class="selectBox" tabindex="0">
-                                 <select id="lot_no" name="lot_no" class="lot-no form-control form-select required" style="width: 100%;" required>
-                                    <option>Select Lot No</option>
-                                </select>
-                                <div class="overSelect"></div>
-                            </div>
-                            <div id="lotNoSelectOptions" class="shadow"></div>
+                            <?php if ($transactionmode == "U") { ?>
+                                <!-- Display as text input in edit mode with the stored value -->
+                                <input type="text" id="lot_no_display" name="lot_no_display" class="form-control" 
+                                       value="<?php echo htmlspecialchars($_bll->_mdl->_lot_no ?? ''); ?>" readonly>
+                                <input type="hidden" id="lot_no" name="lot_no" value="<?php echo htmlspecialchars($_bll->_mdl->_lot_no ?? ''); ?>">
+                            <?php } else { ?>
+                                <!-- Display as multiselect in add mode -->
+                                <div id="lotNoMultiselect" class="multiselect position-relative">
+                                    <div id="lotNoSelectLabel" class="selectBox" tabindex="0">
+                                        <select id="lot_no" name="lot_no" class="lot-no form-control form-select required" style="width: 100%;" required>
+                                            <option>Select Lot No</option>
+                                        </select>
+                                        <div class="overSelect"></div>
+                                    </div>
+                                    <div id="lotNoSelectOptions" class="shadow"></div>
+                                </div>
+                            <?php } ?>
                         </div>
-                    </div>
-                      <?php
-                      $show_generate_btn = true;
-                      continue;
+                        <?php
+                        $show_generate_btn = true;
+                        continue;
                     }
+ 
                     // Layout logic
                     $table_layout = $old_table_layout;
                     $required = "";
@@ -1476,6 +1479,7 @@ document.addEventListener("DOMContentLoaded", function () {
             });
         }
         clearForm(form);
+        updateBasicAmountFromManualGrid();
     }
     function getHiddenFields() {
       
@@ -1808,6 +1812,7 @@ function updateTableRow(index, rowData) {
             }
           }
         });
+        updateBasicAmountFromManualGrid();
     }
     $("#popupForm" ).on( "submit", function( event ) {
         event.preventDefault();
@@ -1935,9 +1940,10 @@ function updateTableRow(index, rowData) {
         });
 });
 </script>
+    
 <script>
 let generatedDetailsData = [];
-
+ 
 document.getElementById("generate").addEventListener("click", function () {
     const gridContainer = document.getElementById("generatedInvoiceGrid");
     const tableBody = document.getElementById("generatedInvoiceTableBody");
@@ -1946,7 +1952,7 @@ document.getElementById("generate").addEventListener("click", function () {
     const invoiceType = document.querySelector('input[name="invoice_type"]:checked') ? document.querySelector('input[name="invoice_type"]:checked').value : '';
     const lotNoCheckboxes = document.querySelectorAll('input[name="lot_no[]"]:checked');
     const lotNos = Array.from(lotNoCheckboxes).map(cb => cb.value);
-
+ 
     if (!customer) {
         Swal.fire({
             icon: "warning",
@@ -1970,7 +1976,7 @@ document.getElementById("generate").addEventListener("click", function () {
             tableBody.innerHTML = "";
             generatedDetailsData = [];
             let totalAmount = 0;
-
+ 
             if (!invoiceData || invoiceData.length === 0) {
                 const row = document.createElement("tr");
                 row.innerHTML = '<td colspan="21" style="text-align:center;">No records available.</td>';
@@ -2001,7 +2007,7 @@ document.getElementById("generate").addEventListener("click", function () {
                         <td>${data.status ?? ''}</td>
                     `;
                     tableBody.appendChild(row);
-
+ 
                     // Remove commas from amount and parse as float
                     if (data.amount) {
                         let amt = parseFloat(data.amount.replace(/,/g, ''));
@@ -2009,7 +2015,7 @@ document.getElementById("generate").addEventListener("click", function () {
                             totalAmount += amt;
                         }
                     }
-
+ 
                     generatedDetailsData.push({
                         inward_no: data.in_no ?? '',
                         inward_date: data.inward_date_db ?? '',
@@ -2055,7 +2061,23 @@ document.getElementById("generate").addEventListener("click", function () {
         }
     });
 });
-
+function sumManualGridAmounts() {
+    let total = 0;
+    document.querySelectorAll('#searchDetail tbody tr:not(.norecords) td[data-label="amount"]').forEach(function(td) {
+        let amt = parseFloat((td.textContent || '').replace(/,/g, ''));
+        if (!isNaN(amt)) total += amt;
+    });
+    return total;
+}
+function updateBasicAmountFromManualGrid() {
+    let total = sumManualGridAmounts();
+    let basicAmountInput = document.getElementById("basic_amount");
+    if (basicAmountInput) {
+        basicAmountInput.value = total.toFixed(2);
+    }
+    recalculateInvoiceAmounts();
+}
+ 
 function getFloat(id) {
     var v = document.getElementById(id);
     return v && v.value ? parseFloat(v.value) || 0 : 0;
@@ -2068,34 +2090,34 @@ function getFloat(id) {
     }
     return 0;
 }
-
-
+ 
+ 
 function recalculateInvoiceAmounts() {
     let gridTotal = getFloat("basic_amount");
     let otherExpense = getFloat("other_expense3");
     let otherExpenseSign = getTextareaFloatByName("other_expense3_sign");
-
+ 
     let newBasic = gridTotal + otherExpense + otherExpenseSign;
-
+ 
     let basicInput = document.getElementById("basic_amount");
     if (basicInput) {
         basicInput.value = newBasic.toFixed(2);
     }
-
+ 
     let sgstAmtInput = document.getElementById("sgst_amt");
     let cgstAmtInput = document.getElementById("cgst_amt");
     let igstAmtInput = document.getElementById("igst_amt");
-
+ 
     if (sgstAmtInput) sgstAmtInput.value = "0.00";
     if (cgstAmtInput) cgstAmtInput.value = "0.00";
     if (igstAmtInput) igstAmtInput.value = "0.00";
-
+ 
     let taxType = "";
     let taxRadio = document.querySelector('input[name="tax_amount"]:checked');
     if (taxRadio) {
         taxType = taxRadio.value;
     }
-
+ 
     let sgst = 0, cgst = 0, igst = 0;
     if (taxType == "2" && sgstAmtInput && cgstAmtInput) {
         sgst = newBasic * 0.09;
@@ -2109,27 +2131,25 @@ function recalculateInvoiceAmounts() {
         cgst = newBasic * 0.12;
         cgstAmtInput.value = cgst.toFixed(2);
     }
-
+ 
     let netAmount = newBasic + sgst + cgst + igst;
     let netAmountInput = document.getElementById("net_amount");
     if (netAmountInput) {
         netAmountInput.value = netAmount.toFixed(2);
     }
 }
-
+ 
 let otherExpenseInput = document.getElementById("other_expense3");
 if (otherExpenseInput) {
     otherExpenseInput.addEventListener("input", recalculateInvoiceAmounts);
 }
-
+ 
 let otherExpenseSignInput = document.getElementsByName("other_expense3_sign")[0];
 if (otherExpenseSignInput) {
     otherExpenseSignInput.addEventListener("input", recalculateInvoiceAmounts);
 }
-
 document.querySelectorAll('input[name="tax_amount"]').forEach(function (radio) {
     radio.addEventListener("change", recalculateInvoiceAmounts);
 });
-
 window.addEventListener("DOMContentLoaded", recalculateInvoiceAmounts);
 </script>
