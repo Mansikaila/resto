@@ -77,6 +77,10 @@ class bll_rentinvoicedetail
     $main_id_name = "rent_invoice_id";
     // Use $_REQUEST['rent_invoice_id'] directly for Update mode
     $main_id = isset($_REQUEST['rent_invoice_id']) ? $_REQUEST['rent_invoice_id'] : ($this->_mdl->$main_id_name ?? 0);
+        // Add: fallback to model if not set in request
+if (!$main_id && !empty($this->_mdl->rent_invoice_id)) {
+    $main_id = $this->_mdl->rent_invoice_id;
+}
 
     if ($main_id) {
         $sql = "CALL csms1_search_detail('t.description, t.qty, t.unit, t.rate_per_unit, t.amount, t.remark, t.rent_invoice_detail_id','tbl_rent_invoice_detail t','t.".$main_id_name."=".$main_id."')";
