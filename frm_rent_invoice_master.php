@@ -584,13 +584,19 @@ if ($transactionmode == "U") {
                           </tbody>
                         </table>
                       </div>
+                          <?php
+// Edit mode ma rent_invoice_id set karo before detail grid call
+if ($transactionmode == "U" && !isset($_REQUEST['rent_invoice_id'])) {
+    $_REQUEST['rent_invoice_id'] = $_bll->_mdl->_rent_invoice_id;
+}
+?>
                         <div id="generated-invoice-details" style="display:none;"></div>
                         <div class="box-detail" id="manual-invoice-details" style="display:none;">
-                          <?php
-                          $_blldetail = new bll_rentinvoicedetail();
-                          $detailHtml = $_blldetail->pageSearch();
-                          echo $detailHtml ? $detailHtml : '';
-                          ?>
+    <?php
+    $_blldetail = new bll_rentinvoicedetail();
+    $detailHtml = $_blldetail->pageSearch();
+    echo $detailHtml ? $detailHtml : '';
+  ?>
                           <button type="button" name="detailBtn" id="detailBtn" class="btn btn-primary add"
                               data-bs-toggle="modal" data-bs-target="#modalDialog" onclick="openModal()">
                               Add Detail Record
@@ -737,6 +743,7 @@ if ($transactionmode == "U") {
           <input type="button" class="btn btn-primary" id="btn_search" name="btn_search" value="Search" onclick="window.location='srh_rent_invoice_master.php'">
           <input class="btn btn-secondary" type="button" id="btn_reset" name="btn_reset" value="Reset" onclick="document.getElementById('masterForm').reset();" >
             <input type="hidden" id="invoice_no_hidden" name="invoice_no" value="<?php echo $invoice_no_formatted; ?>">
+            <input type="hidden" name="rent_invoice_id" id="rent_invoice_id" value="<?php echo htmlspecialchars($_bll->_mdl->_rent_invoice_id ?? ''); ?>">
         </div>
         <!-- /.box-footer -->
       </form>
